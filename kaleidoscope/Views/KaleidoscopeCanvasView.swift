@@ -265,13 +265,19 @@ struct KaleidoscopeCanvasView: View {
         let colors = state.currentPaletteColors
         let color1 = colors.first ?? .black
         let color2 = colors.count > 2 ? colors[2] : .black
+        let color3 = colors.count > 3 ? colors[3] : color1
         
-        let pulse = Foundation.sin(phase * 0.1) * 0.03 + 0.05
+        // Multi-frequency breathing for organic feel
+        let breath1 = Foundation.sin(phase * 0.08) * 0.015 + 0.04
+        let breath2 = Foundation.sin(phase * 0.12 + 1.0) * 0.01 + 0.03
         
-        let bgGradient = Gradient(colors: [
-            color1.opacity(pulse),
-            color2.opacity(pulse * 0.5),
-            Color.black
+        // Rich layered background gradient
+        let bgGradient = Gradient(stops: [
+            .init(color: color1.opacity(breath1 + breath2), location: 0.0),
+            .init(color: color2.opacity(breath1 * 0.7), location: 0.25),
+            .init(color: color3.opacity(breath2 * 0.5), location: 0.5),
+            .init(color: Color(white: 0.02), location: 0.75),
+            .init(color: .black, location: 1.0)
         ])
         
         context.fill(
@@ -280,7 +286,25 @@ struct KaleidoscopeCanvasView: View {
                 bgGradient,
                 center: center,
                 startRadius: 0,
-                endRadius: max(size.width, size.height)
+                endRadius: max(size.width, size.height) * 1.1
+            )
+        )
+        
+        // Subtle vignette for depth
+        let vignetteGradient = Gradient(stops: [
+            .init(color: .clear, location: 0.0),
+            .init(color: .clear, location: 0.6),
+            .init(color: .black.opacity(0.3), location: 0.85),
+            .init(color: .black.opacity(0.6), location: 1.0)
+        ])
+        
+        context.fill(
+            Path(CGRect(origin: .zero, size: size)),
+            with: .radialGradient(
+                vignetteGradient,
+                center: center,
+                startRadius: 0,
+                endRadius: max(size.width, size.height) * 0.8
             )
         )
     }
@@ -381,16 +405,23 @@ struct KaleidoscopeCanvasView: View {
         color: Color,
         phase: Double
     ) {
-        let layers = 4
-        for i in (0..<layers).reversed() {
-            let t = Double(i) / Double(layers - 1)
-            let r = radius * (1.0 + t * 1.5)
-            let alpha = (1.0 - t) * 0.4
+        // Subtle breathing animation
+        let breathe = 1.0 + Foundation.sin(phase * 0.6) * 0.08
+        let adjustedRadius = radius * breathe
+        
+        // Outer ethereal glow layers (more gradual falloff)
+        let glowLayers = 6
+        for i in (0..<glowLayers).reversed() {
+            let t = Double(i) / Double(glowLayers - 1)
+            let r = adjustedRadius * (1.0 + t * 2.5)
+            // Gaussian-like falloff
+            let falloff = exp(-t * t * 2.0)
+            let alpha = falloff * 0.25
             
-            let gradient = Gradient(colors: [
-                color.opacity(alpha),
-                color.opacity(alpha * 0.3),
-                color.opacity(0)
+            let gradient = Gradient(stops: [
+                .init(color: color.opacity(alpha), location: 0.0),
+                .init(color: color.opacity(alpha * 0.4), location: 0.5),
+                .init(color: color.opacity(0), location: 1.0)
             ])
             
             context.fill(
@@ -399,16 +430,37 @@ struct KaleidoscopeCanvasView: View {
             )
         }
         
-        let coreGradient = Gradient(colors: [
-            .white.opacity(0.9),
-            color.opacity(0.8),
-            color.opacity(0.4)
+        // Inner luminous core with color depth
+        let coreRadius = adjustedRadius * 0.5
+        let corePulse = Foundation.sin(phase * 1.2) * 0.1 + 0.9
+        
+        let coreGradient = Gradient(stops: [
+            .init(color: .white.opacity(0.95 * corePulse), location: 0.0),
+            .init(color: .white.opacity(0.7 * corePulse), location: 0.2),
+            .init(color: color.opacity(0.85), location: 0.5),
+            .init(color: color.opacity(0.4), location: 0.8),
+            .init(color: color.opacity(0.1), location: 1.0)
         ])
         
-        let coreRadius = radius * 0.4
         context.fill(
             Path(ellipseIn: CGRect(x: center.x - coreRadius, y: center.y - coreRadius, width: coreRadius * 2, height: coreRadius * 2)),
             with: .radialGradient(coreGradient, center: center, startRadius: 0, endRadius: coreRadius)
+        )
+        
+        // Specular highlight
+        let highlightOffset = adjustedRadius * 0.15
+        let highlightRadius = adjustedRadius * 0.2
+        let highlightCenter = CGPoint(x: center.x - highlightOffset, y: center.y - highlightOffset)
+        let highlightAlpha = 0.4 + Foundation.sin(phase * 0.8) * 0.1
+        
+        context.fill(
+            Path(ellipseIn: CGRect(x: highlightCenter.x - highlightRadius, y: highlightCenter.y - highlightRadius, width: highlightRadius * 2, height: highlightRadius * 2)),
+            with: .radialGradient(
+                Gradient(colors: [.white.opacity(highlightAlpha), .clear]),
+                center: highlightCenter,
+                startRadius: 0,
+                endRadius: highlightRadius
+            )
         )
     }
     
@@ -420,22 +472,27 @@ struct KaleidoscopeCanvasView: View {
         rotation: Angle,
         phase: Double
     ) {
-        let segments = 24
-        let length = radius * 3.5
+        let segments = 32
+        let length = radius * 4.0
         
         var points: [CGPoint] = []
+        var widths: [CGFloat] = []
         
         for i in 0...segments {
             let t = Double(i) / Double(segments)
             let angle = rotation.radians + t * Double.pi
             
-            let waveFreq1 = 0.5 + t * 0.3
-            let waveFreq2 = 0.4 + t * 0.2
-            let wave1 = Foundation.sin(phase * waveFreq1 + t * Double.pi * 5) * radius * 0.35
-            let wave2 = Foundation.cos(phase * waveFreq2 + t * Double.pi * 3) * radius * 0.2
+            // Multi-harmonic wave for organic flowing motion
+            let wave1 = Foundation.sin(phase * 0.4 + t * Double.pi * 4) * radius * 0.4
+            let wave2 = Foundation.cos(phase * 0.3 + t * Double.pi * 2.5) * radius * 0.25
+            let wave3 = Foundation.sin(phase * 0.55 + t * Double.pi * 6) * radius * 0.15
             
             let perpAngle = angle + Double.pi / 2
-            let offset = wave1 + wave2
+            let offset = wave1 + wave2 + wave3
+            
+            // Tapered width - thicker in middle, thinner at ends
+            let taper = Foundation.sin(t * Double.pi)
+            widths.append(radius * 0.08 * taper + radius * 0.02)
             
             let x = center.x + Foundation.cos(angle) * length * (t - 0.5) + Foundation.cos(perpAngle) * offset
             let y = center.y + Foundation.sin(angle) * length * (t - 0.5) + Foundation.sin(perpAngle) * offset
@@ -445,15 +502,18 @@ struct KaleidoscopeCanvasView: View {
         
         guard points.count >= 2 else { return }
         
-        for layer in 0..<4 {
-            let alpha = 0.08 - Double(layer) * 0.015
-            let width = radius * (0.15 + Double(layer) * 0.12)
+        // Outer glow layers with Gaussian falloff
+        for layer in (0..<5).reversed() {
+            let t = Double(layer) / 4.0
+            let falloff = exp(-t * t * 1.5)
+            let alpha = 0.06 * falloff
+            let width = radius * (0.25 + t * 0.4)
             
             var path = Path()
             path.move(to: points[0])
             
+            // Catmull-Rom style smooth curve
             for i in 1..<points.count - 1 {
-                let p0 = points[i - 1]
                 let p1 = points[i]
                 let p2 = points[i + 1]
                 
@@ -474,20 +534,49 @@ struct KaleidoscopeCanvasView: View {
             )
         }
         
+        // Create smooth bezier path for core
         var corePath = Path()
         corePath.move(to: points[0])
-        for i in 1..<points.count {
-            corePath.addLine(to: points[i])
+        
+        for i in 1..<points.count - 1 {
+            let p1 = points[i]
+            let p2 = points[i + 1]
+            let midX = (p1.x + p2.x) / 2
+            let midY = (p1.y + p2.y) / 2
+            corePath.addQuadCurve(to: CGPoint(x: midX, y: midY), control: p1)
         }
+        if let last = points.last {
+            corePath.addLine(to: last)
+        }
+        
+        // Luminous core with gradient
+        let coreGradient = Gradient(stops: [
+            .init(color: color.opacity(0.3), location: 0.0),
+            .init(color: .white.opacity(0.85), location: 0.35),
+            .init(color: .white.opacity(0.9), location: 0.5),
+            .init(color: .white.opacity(0.85), location: 0.65),
+            .init(color: color.opacity(0.3), location: 1.0)
+        ])
         
         context.stroke(
             corePath,
             with: .linearGradient(
-                Gradient(colors: [color.opacity(0.6), .white.opacity(0.8), color.opacity(0.6)]),
+                coreGradient,
                 startPoint: points.first ?? center,
                 endPoint: points.last ?? center
             ),
-            style: StrokeStyle(lineWidth: radius * 0.04, lineCap: .round)
+            style: StrokeStyle(lineWidth: radius * 0.035, lineCap: .round)
+        )
+        
+        // Inner bright core
+        context.stroke(
+            corePath,
+            with: .linearGradient(
+                Gradient(colors: [.clear, .white.opacity(0.6), .clear]),
+                startPoint: points.first ?? center,
+                endPoint: points.last ?? center
+            ),
+            style: StrokeStyle(lineWidth: radius * 0.015, lineCap: .round)
         )
     }
     
@@ -499,21 +588,32 @@ struct KaleidoscopeCanvasView: View {
         rotation: Angle,
         phase: Double
     ) {
-        let shimmer = Foundation.sin(phase * 2) * 0.5 + 0.5
-        let dynamicRotation = rotation.radians + phase * 0.2
+        // Subtle multi-frequency shimmer
+        let shimmer1 = Foundation.sin(phase * 1.5) * 0.5 + 0.5
+        let shimmer2 = Foundation.sin(phase * 2.3 + 1.0) * 0.3 + 0.5
+        let shimmer = shimmer1 * 0.6 + shimmer2 * 0.4
         
-        let points: [CGPoint] = (0..<6).map { i in
-            let angle = Double(i) * (Double.pi * 2 / 6) + dynamicRotation
-            let r = radius * (i % 2 == 0 ? 1.0 : 0.5)
+        // Slow, graceful rotation
+        let dynamicRotation = rotation.radians + phase * 0.12
+        
+        // 8-pointed star for more elegant shape
+        let pointCount = 8
+        let points: [CGPoint] = (0..<pointCount).map { i in
+            let angle = Double(i) * (Double.pi * 2 / Double(pointCount)) + dynamicRotation
+            let innerOuter = i % 2 == 0 ? 1.0 : 0.45
+            let r = radius * innerOuter
             return CGPoint(
                 x: center.x + Foundation.cos(angle) * r,
                 y: center.y + Foundation.sin(angle) * r
             )
         }
         
-        for layer in (0..<3).reversed() {
-            let scale = 1.0 + Double(layer) * 0.3
-            let alpha = 0.1 - Double(layer) * 0.025
+        // Soft outer glow with Gaussian falloff
+        for layer in (0..<5).reversed() {
+            let t = Double(layer) / 4.0
+            let falloff = exp(-t * t * 2.0)
+            let scale = 1.0 + t * 0.6
+            let alpha = 0.08 * falloff
             
             var glowPath = Path()
             let scaledPoints = points.map { p in
@@ -532,6 +632,7 @@ struct KaleidoscopeCanvasView: View {
             context.fill(glowPath, with: .color(color.opacity(alpha)))
         }
         
+        // Main crystal body
         var mainPath = Path()
         mainPath.move(to: points[0])
         for point in points.dropFirst() {
@@ -539,26 +640,41 @@ struct KaleidoscopeCanvasView: View {
         }
         mainPath.closeSubpath()
         
+        // Rich gradient fill with depth
+        let fillGradient = Gradient(stops: [
+            .init(color: .white.opacity(0.15 + shimmer * 0.2), location: 0.0),
+            .init(color: color.opacity(0.35 + shimmer * 0.25), location: 0.3),
+            .init(color: color.opacity(0.2 + shimmer * 0.15), location: 0.7),
+            .init(color: color.opacity(0.08), location: 1.0)
+        ])
+        
         context.fill(
             mainPath,
             with: .linearGradient(
-                Gradient(colors: [
-                    color.opacity(0.3 + shimmer * 0.3),
-                    color.opacity(0.1 + shimmer * 0.1)
-                ]),
-                startPoint: CGPoint(x: center.x, y: center.y - radius),
-                endPoint: CGPoint(x: center.x, y: center.y + radius)
+                fillGradient,
+                startPoint: CGPoint(x: center.x - radius * 0.5, y: center.y - radius),
+                endPoint: CGPoint(x: center.x + radius * 0.5, y: center.y + radius)
             )
         )
         
+        // Crisp edge highlight
         context.stroke(
             mainPath,
-            with: .color(.white.opacity(0.2 + shimmer * 0.3)),
-            style: StrokeStyle(lineWidth: 0.5)
+            with: .linearGradient(
+                Gradient(stops: [
+                    .init(color: .white.opacity(0.5 * shimmer), location: 0.0),
+                    .init(color: .white.opacity(0.2), location: 0.5),
+                    .init(color: .white.opacity(0.4 * shimmer), location: 1.0)
+                ]),
+                startPoint: CGPoint(x: center.x - radius, y: center.y - radius),
+                endPoint: CGPoint(x: center.x + radius, y: center.y + radius)
+            ),
+            style: StrokeStyle(lineWidth: 0.6)
         )
         
-        let highlightRadius = radius * 0.15
-        let highlightCenter = CGPoint(x: center.x - radius * 0.2, y: center.y - radius * 0.2)
+        // Primary specular highlight
+        let highlightRadius = radius * 0.2
+        let highlightCenter = CGPoint(x: center.x - radius * 0.25, y: center.y - radius * 0.25)
         
         context.fill(
             Path(ellipseIn: CGRect(
@@ -568,70 +684,117 @@ struct KaleidoscopeCanvasView: View {
                 height: highlightRadius * 2
             )),
             with: .radialGradient(
-                Gradient(colors: [.white.opacity(0.5 * shimmer), .clear]),
+                Gradient(stops: [
+                    .init(color: .white.opacity(0.7 * shimmer), location: 0.0),
+                    .init(color: .white.opacity(0.3 * shimmer), location: 0.5),
+                    .init(color: .clear, location: 1.0)
+                ]),
                 center: highlightCenter,
                 startRadius: 0,
                 endRadius: highlightRadius
             )
         )
+        
+        // Secondary subtle highlight
+        let highlight2Radius = radius * 0.12
+        let highlight2Center = CGPoint(x: center.x + radius * 0.15, y: center.y + radius * 0.1)
+        
+        context.fill(
+            Path(ellipseIn: CGRect(
+                x: highlight2Center.x - highlight2Radius,
+                y: highlight2Center.y - highlight2Radius,
+                width: highlight2Radius * 2,
+                height: highlight2Radius * 2
+            )),
+            with: .radialGradient(
+                Gradient(colors: [.white.opacity(0.25 * shimmer), .clear]),
+                center: highlight2Center,
+                startRadius: 0,
+                endRadius: highlight2Radius
+            )
+        )
     }
     
     private func drawAmbientParticles(context: GraphicsContext, size: CGSize, phase: Double, layer: Int) {
-        let particleCount = 50
+        let particleCount = 60
         let layerOffset = Double(layer) * 1000.0
+        let depthFactor = 1.0 - Double(layer) * 0.25
         
         for i in 0..<particleCount {
             let seed = Double(i) + layerOffset
-            let x = fmod(seed * 0.618033988749895 + phase * 0.02 * (1 + Double(layer) * 0.3), 1.0) * size.width
-            let y = fmod(seed * 0.381966011250105 + phase * 0.015 * (1 + Double(layer) * 0.2), 1.0) * size.height
+            let goldenAngle = 2.399963229728653
             
-            let twinkle = Foundation.sin(phase * (2 + seed * 0.1)) * 0.5 + 0.5
-            let baseAlpha = 0.15 - Double(layer) * 0.03
+            // Spiral distribution with gentle drift
+            let spiralPhase = phase * 0.015 * depthFactor
+            let x = fmod(seed * 0.618033988749895 + spiralPhase, 1.0) * size.width
+            let y = fmod(seed * goldenAngle * 0.1 + spiralPhase * 0.8, 1.0) * size.height
+            
+            // Multi-frequency twinkle for more organic feel
+            let twinkle1 = Foundation.sin(phase * (1.8 + seed * 0.08)) * 0.4 + 0.5
+            let twinkle2 = Foundation.sin(phase * (2.5 + seed * 0.12) + seed) * 0.3 + 0.5
+            let twinkle = twinkle1 * 0.6 + twinkle2 * 0.4
+            
+            let baseAlpha = (0.12 - Double(layer) * 0.025) * depthFactor
             let alpha = baseAlpha * twinkle
             
-            let particleRadius = 1.0 + seed.truncatingRemainder(dividingBy: 3.0) + twinkle * 2
+            // Size varies by depth and twinkle
+            let baseSize = 0.8 + seed.truncatingRemainder(dividingBy: 2.5)
+            let particleRadius = baseSize * depthFactor + twinkle * 1.5
             
             let colors = state.currentPaletteColors
             let colorIndex = Int(seed) % max(colors.count, 1)
             let color = colors.isEmpty ? Color.white : colors[colorIndex]
             
+            // Soft glow with color depth
             context.fill(
                 Path(ellipseIn: CGRect(
-                    x: x - particleRadius,
-                    y: y - particleRadius,
-                    width: particleRadius * 2,
-                    height: particleRadius * 2
+                    x: x - particleRadius * 1.5,
+                    y: y - particleRadius * 1.5,
+                    width: particleRadius * 3,
+                    height: particleRadius * 3
                 )),
                 with: .radialGradient(
-                    Gradient(colors: [color.opacity(alpha), color.opacity(0)]),
+                    Gradient(stops: [
+                        .init(color: .white.opacity(alpha * 0.8), location: 0.0),
+                        .init(color: color.opacity(alpha * 0.6), location: 0.3),
+                        .init(color: color.opacity(alpha * 0.2), location: 0.6),
+                        .init(color: .clear, location: 1.0)
+                    ]),
                     center: CGPoint(x: x, y: y),
                     startRadius: 0,
-                    endRadius: particleRadius
+                    endRadius: particleRadius * 1.5
                 )
             )
         }
     }
     
     private func drawFloatingMotes(context: GraphicsContext, size: CGSize, phase: Double) {
-        let moteCount = 80
+        let moteCount = 100
         
         for i in 0..<moteCount {
             let seed = Double(i) * 7.919
             
+            // Gentler, more natural drift pattern
             let baseX = fmod(seed * 0.618033988749895, 1.0) * size.width
             let baseY = fmod(seed * 0.381966011250105, 1.0) * size.height
             
-            let driftX = Foundation.sin(phase * 0.3 + seed) * 30
-            let driftY = Foundation.cos(phase * 0.25 + seed * 1.3) * 25 - phase * 5
+            // Multi-frequency organic movement
+            let driftX = Foundation.sin(phase * 0.2 + seed) * 25 +
+                        Foundation.sin(phase * 0.35 + seed * 1.7) * 15
+            let driftY = Foundation.cos(phase * 0.18 + seed * 1.3) * 20 +
+                        Foundation.cos(phase * 0.28 + seed * 0.9) * 12 -
+                        phase * 3  // Gentle upward drift
             
             var x = baseX + driftX
-            var y = fmod(baseY + driftY, size.height + 50)
-            if y < -25 { y += size.height + 50 }
+            var y = fmod(baseY + driftY, size.height + 60)
+            if y < -30 { y += size.height + 60 }
             
-            let twinkle = Foundation.sin(phase * (1.5 + seed * 0.05)) * 0.5 + 0.5
-            let alpha = 0.1 + twinkle * 0.15
+            // Smooth twinkle with natural fade
+            let twinklePhase = phase * (1.2 + seed * 0.04)
+            let twinkle = pow(Foundation.sin(twinklePhase) * 0.5 + 0.5, 1.5)
+            let alpha = 0.08 + twinkle * 0.18
             
-            let moteRadius = 0.5 + twinkle * 1.5
+            let moteRadius = 0.4 + twinkle * 1.2
             
             context.fill(
                 Path(ellipseIn: CGRect(

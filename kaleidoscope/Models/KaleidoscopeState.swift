@@ -141,15 +141,25 @@ final class KaleidoscopeState {
     func evolve(deltaTime: Double) {
         let smoothDelta = min(deltaTime, 0.033)
         
-        animationPhase += smoothDelta * 0.4
+        // Ultra-smooth animation phase with variable speed
+        let phaseSpeed = 0.3 + Foundation.sin(animationPhase * 0.1) * 0.05
+        animationPhase += smoothDelta * phaseSpeed
         
-        targetGlobalRotation += smoothDelta * 0.02
-        let rotationLerp = 1.0 - pow(0.05, smoothDelta)
-        globalRotation += (targetGlobalRotation - globalRotation) * rotationLerp
+        // Organic rotation with breathing rhythm
+        let breathCycle = Foundation.sin(animationPhase * 0.15) * 0.008
+        targetGlobalRotation += smoothDelta * (0.015 + breathCycle)
         
-        let touchLerp = 1.0 - pow(0.001, smoothDelta)
-        smoothTouchOffset.x += (touchOffset.x - smoothTouchOffset.x) * touchLerp
-        smoothTouchOffset.y += (touchOffset.y - smoothTouchOffset.y) * touchLerp
+        // Critically damped spring for rotation (more natural feel)
+        let omega = 3.0
+        let zeta = 1.0
+        let rotationDiff = targetGlobalRotation - globalRotation
+        let springForce = omega * omega * rotationDiff
+        globalRotation += springForce * smoothDelta
+        
+        // Exponential smoothing for touch with natural decay
+        let touchDecay = exp(-8.0 * smoothDelta)
+        smoothTouchOffset.x = touchOffset.x + (smoothTouchOffset.x - touchOffset.x) * touchDecay
+        smoothTouchOffset.y = touchOffset.y + (smoothTouchOffset.y - touchOffset.y) * touchDecay
         
         timeSinceLastEvolution += smoothDelta
         if timeSinceLastEvolution >= evolutionInterval && !isTransitioning {
@@ -157,7 +167,8 @@ final class KaleidoscopeState {
         }
         
         if isTransitioning {
-            transitionProgress += smoothDelta * 0.25
+            // Smoother S-curve transition
+            transitionProgress += smoothDelta * 0.2
             if transitionProgress >= 1.0 {
                 completeEvolution()
             } else {
@@ -166,60 +177,87 @@ final class KaleidoscopeState {
         }
         
         if colorTransitionProgress < 1.0 {
-            colorTransitionProgress = min(1.0, colorTransitionProgress + smoothDelta * 0.8)
+            colorTransitionProgress = min(1.0, colorTransitionProgress + smoothDelta * 0.6)
             updateElementColors()
         }
         
-        tapRipples.removeAll { animationPhase - $0.startTime > 4.0 }
+        tapRipples.removeAll { animationPhase - $0.startTime > 5.0 }
         
         for i in seedElements.indices {
             var element = seedElements[i]
             
-            let energyDecay = 1.0 - smoothDelta * 1.5
+            // Smoother energy decay with minimum threshold
+            let energyDecay = exp(-2.0 * smoothDelta)
             element.energy *= energyDecay
-            if element.energy < 0.005 { element.energy = 0 }
+            if element.energy < 0.001 { element.energy = 0 }
             
             let phase = animationPhase + element.phaseOffset
-            let energyBoost = 1.0 + element.energy * 2.0
+            let energyBoost = 1.0 + element.energy * 1.5
             
-            let flowFreqX = 0.2 + element.depth * 0.1
-            let flowFreqY = 0.15 + element.depth * 0.08
-            let flowX = Foundation.sin(phase * flowFreqX) * 0.0015 * energyBoost
-            let flowY = Foundation.cos(phase * flowFreqY) * 0.0015 * energyBoost
+            // Multi-frequency organic flow (Perlin-like motion)
+            let freq1 = 0.12 + element.depth * 0.05
+            let freq2 = 0.23 + element.depth * 0.08
+            let freq3 = 0.07 + element.depth * 0.03
             
-            let velocityDamping = 1.0 - smoothDelta * 0.8
-            element.velocity.x *= velocityDamping
-            element.velocity.y *= velocityDamping
+            let flowX = (Foundation.sin(phase * freq1) * 0.4 +
+                        Foundation.sin(phase * freq2 + element.phaseOffset) * 0.3 +
+                        Foundation.sin(phase * freq3 + 2.5) * 0.3) * 0.002 * energyBoost
             
-            let positionLerp = 1.0 - pow(0.3, smoothDelta)
-            let targetX = element.position.x + (element.velocity.x + flowX) * 30
-            let targetY = element.position.y + (element.velocity.y + flowY) * 30
-            element.position.x += (targetX - element.position.x) * positionLerp
-            element.position.y += (targetY - element.position.y) * positionLerp
+            let flowY = (Foundation.cos(phase * freq1 * 0.9) * 0.4 +
+                        Foundation.cos(phase * freq2 * 1.1 + element.phaseOffset) * 0.3 +
+                        Foundation.cos(phase * freq3 * 0.8 + 1.7) * 0.3) * 0.002 * energyBoost
             
-            let touchInfluence = 0.1 * (1.0 - element.depth * 0.3)
+            // Velocity with fluid-like damping
+            let velocityDecay = exp(-3.5 * smoothDelta)
+            element.velocity.x *= velocityDecay
+            element.velocity.y *= velocityDecay
+            
+            // Smooth position integration with variable response
+            let responsiveness = 0.92 - element.depth * 0.15
+            let positionDecay = exp(-6.0 * smoothDelta * responsiveness)
+            
+            let targetX = element.position.x + (element.velocity.x + flowX) * 25
+            let targetY = element.position.y + (element.velocity.y + flowY) * 25
+            
+            element.position.x = targetX + (element.position.x - targetX) * positionDecay
+            element.position.y = targetY + (element.position.y - targetY) * positionDecay
+            
+            // Parallax touch influence based on depth
+            let depthFactor = 1.0 - element.depth * 0.6
+            let touchInfluence = 0.08 * depthFactor * depthFactor
             element.position.x += smoothTouchOffset.x * touchInfluence * smoothDelta
             element.position.y += smoothTouchOffset.y * touchInfluence * smoothDelta
             
-            let boundary: Double = 0.08
+            // Soft boundary with elastic response
+            let boundary: Double = 0.05
+            let softness: Double = 0.15
+            
             if element.position.x < boundary {
-                element.velocity.x = abs(element.velocity.x) * 0.3
-                element.position.x = boundary + (boundary - element.position.x) * 0.5
+                let penetration = boundary - element.position.x
+                element.velocity.x += penetration * softness
+                element.position.x += penetration * 0.1
             } else if element.position.x > 1.0 - boundary {
-                element.velocity.x = -abs(element.velocity.x) * 0.3
-                element.position.x = (1.0 - boundary) - (element.position.x - (1.0 - boundary)) * 0.5
-            }
-            if element.position.y < boundary {
-                element.velocity.y = abs(element.velocity.y) * 0.3
-                element.position.y = boundary + (boundary - element.position.y) * 0.5
-            } else if element.position.y > 1.0 - boundary {
-                element.velocity.y = -abs(element.velocity.y) * 0.3
-                element.position.y = (1.0 - boundary) - (element.position.y - (1.0 - boundary)) * 0.5
+                let penetration = element.position.x - (1.0 - boundary)
+                element.velocity.x -= penetration * softness
+                element.position.x -= penetration * 0.1
             }
             
-            let rotationDamping = 1.0 - smoothDelta * 0.5
-            element.rotationSpeed *= rotationDamping
-            element.rotation += Angle(degrees: element.rotationSpeed * smoothDelta)
+            if element.position.y < boundary {
+                let penetration = boundary - element.position.y
+                element.velocity.y += penetration * softness
+                element.position.y += penetration * 0.1
+            } else if element.position.y > 1.0 - boundary {
+                let penetration = element.position.y - (1.0 - boundary)
+                element.velocity.y -= penetration * softness
+                element.position.y -= penetration * 0.1
+            }
+            
+            // Organic rotation with varying speed
+            let rotationDecay = exp(-2.0 * smoothDelta)
+            element.rotationSpeed *= rotationDecay
+            
+            let baseRotation = Foundation.sin(phase * 0.3 + element.phaseOffset) * 0.5
+            element.rotation += Angle(degrees: (element.rotationSpeed + baseRotation) * smoothDelta * 60)
             
             seedElements[i] = element
         }
