@@ -86,6 +86,11 @@ final class KaleidoscopeState {
     var motionDirection: CGPoint = .zero
     var shakeEnergy: Double = 0
     
+    // Kinetic energy system - controls overall animation speed
+    var kineticEnergy: Double = 1.0  // 1.0 = full speed, 0.0 = stopped
+    var rotationVelocity: Double = 0.02  // Current rotation speed
+    var isResting: Bool = false  // True when fully stopped
+    
     init() {
         let initialPalette = ColorPalette.dawn
         targetPaletteColors = initialPalette.colors
@@ -110,6 +115,12 @@ final class KaleidoscopeState {
             color: color
         )
         tapRipples.append(ripple)
+        
+        // === TAP ALSO INJECTS ENERGY ===
+        // Tapping wakes up the kaleidoscope too!
+        kineticEnergy = min(1.0, kineticEnergy + 0.15)
+        rotationVelocity = min(0.03, rotationVelocity + 0.005)
+        isResting = false
         
         for i in seedElements.indices {
             let dx = seedElements[i].position.x - normalizedPosition.x
@@ -141,34 +152,57 @@ final class KaleidoscopeState {
     func evolve(deltaTime: Double) {
         let smoothDelta = min(deltaTime, 0.033)
         
-        // Ultra-smooth animation phase with variable speed
-        let phaseSpeed = 0.3 + Foundation.sin(animationPhase * 0.1) * 0.05
-        animationPhase += smoothDelta * phaseSpeed
+        // === KINETIC ENERGY DECAY SYSTEM ===
+        // Gradually slow down over time (like a spinning top)
+        let decayRate = 0.015  // How fast energy decays (lower = slower decay)
+        kineticEnergy *= (1.0 - decayRate * smoothDelta * 60)
         
-        // Organic rotation with breathing rhythm
+        // Clamp to minimum threshold
+        if kineticEnergy < 0.001 {
+            kineticEnergy = 0
+            isResting = true
+        } else {
+            isResting = false
+        }
+        
+        // Rotation velocity also decays
+        rotationVelocity *= (1.0 - decayRate * 0.8 * smoothDelta * 60)
+        if rotationVelocity < 0.0005 {
+            rotationVelocity = 0
+        }
+        
+        // Apply kinetic energy to animation speed
+        let effectiveEnergy = kineticEnergy * kineticEnergy  // Quadratic for smoother stop
+        
+        // Animation phase advances based on kinetic energy
+        let basePhaseSpeed = 0.3 + Foundation.sin(animationPhase * 0.1) * 0.05
+        animationPhase += smoothDelta * basePhaseSpeed * effectiveEnergy
+        
+        // Rotation with energy-based speed
         let breathCycle = Foundation.sin(animationPhase * 0.15) * 0.008
-        targetGlobalRotation += smoothDelta * (0.015 + breathCycle)
+        targetGlobalRotation += smoothDelta * rotationVelocity * effectiveEnergy
         
-        // Critically damped spring for rotation (more natural feel)
+        // Critically damped spring for rotation
         let omega = 3.0
-        let zeta = 1.0
         let rotationDiff = targetGlobalRotation - globalRotation
         let springForce = omega * omega * rotationDiff
-        globalRotation += springForce * smoothDelta
+        globalRotation += springForce * smoothDelta * (0.3 + effectiveEnergy * 0.7)
         
-        // Exponential smoothing for touch with natural decay
+        // Exponential smoothing for touch
         let touchDecay = exp(-8.0 * smoothDelta)
         smoothTouchOffset.x = touchOffset.x + (smoothTouchOffset.x - touchOffset.x) * touchDecay
         smoothTouchOffset.y = touchOffset.y + (smoothTouchOffset.y - touchOffset.y) * touchDecay
         
-        timeSinceLastEvolution += smoothDelta
-        if timeSinceLastEvolution >= evolutionInterval && !isTransitioning {
-            startEvolution()
+        // Only evolve patterns when there's enough energy
+        if kineticEnergy > 0.3 {
+            timeSinceLastEvolution += smoothDelta * effectiveEnergy
+            if timeSinceLastEvolution >= evolutionInterval && !isTransitioning {
+                startEvolution()
+            }
         }
         
         if isTransitioning {
-            // Smoother S-curve transition
-            transitionProgress += smoothDelta * 0.2
+            transitionProgress += smoothDelta * 0.2 * max(0.5, effectiveEnergy)
             if transitionProgress >= 1.0 {
                 completeEvolution()
             } else {
@@ -186,7 +220,7 @@ final class KaleidoscopeState {
         for i in seedElements.indices {
             var element = seedElements[i]
             
-            // Smoother energy decay with minimum threshold
+            // Energy decay with kinetic influence
             let energyDecay = exp(-2.0 * smoothDelta)
             element.energy *= energyDecay
             if element.energy < 0.001 { element.energy = 0 }
@@ -194,27 +228,29 @@ final class KaleidoscopeState {
             let phase = animationPhase + element.phaseOffset
             let energyBoost = 1.0 + element.energy * 1.5
             
-            // Multi-frequency organic flow (Perlin-like motion)
+            // Flow is scaled by kinetic energy
+            let flowScale = effectiveEnergy * 0.002 * energyBoost
             let freq1 = 0.12 + element.depth * 0.05
             let freq2 = 0.23 + element.depth * 0.08
             let freq3 = 0.07 + element.depth * 0.03
             
             let flowX = (Foundation.sin(phase * freq1) * 0.4 +
                         Foundation.sin(phase * freq2 + element.phaseOffset) * 0.3 +
-                        Foundation.sin(phase * freq3 + 2.5) * 0.3) * 0.002 * energyBoost
+                        Foundation.sin(phase * freq3 + 2.5) * 0.3) * flowScale
             
             let flowY = (Foundation.cos(phase * freq1 * 0.9) * 0.4 +
                         Foundation.cos(phase * freq2 * 1.1 + element.phaseOffset) * 0.3 +
-                        Foundation.cos(phase * freq3 * 0.8 + 1.7) * 0.3) * 0.002 * energyBoost
+                        Foundation.cos(phase * freq3 * 0.8 + 1.7) * 0.3) * flowScale
             
-            // Velocity with fluid-like damping
-            let velocityDecay = exp(-3.5 * smoothDelta)
+            // Velocity decay is faster when kinetic energy is low
+            let velocityDecayRate = 3.5 + (1.0 - effectiveEnergy) * 5.0
+            let velocityDecay = exp(-velocityDecayRate * smoothDelta)
             element.velocity.x *= velocityDecay
             element.velocity.y *= velocityDecay
             
-            // Smooth position integration with variable response
-            let responsiveness = 0.92 - element.depth * 0.15
-            let positionDecay = exp(-6.0 * smoothDelta * responsiveness)
+            // Position integration scaled by energy
+            let responsiveness = (0.92 - element.depth * 0.15) * effectiveEnergy
+            let positionDecay = exp(-6.0 * smoothDelta * max(0.1, responsiveness))
             
             let targetX = element.position.x + (element.velocity.x + flowX) * 25
             let targetY = element.position.y + (element.velocity.y + flowY) * 25
@@ -369,7 +405,20 @@ final class KaleidoscopeState {
         motionIntensity = intensity
         motionDirection = acceleration
         
-        // Accumulate shake energy
+        // === INJECT KINETIC ENERGY FROM SHAKE ===
+        // Shake wakes up the kaleidoscope!
+        let energyInjection = intensity * 0.5
+        kineticEnergy = min(1.0, kineticEnergy + energyInjection)
+        
+        // Also boost rotation velocity
+        rotationVelocity = min(0.05, rotationVelocity + intensity * 0.02)
+        
+        // Mark as no longer resting
+        if intensity > 0.2 {
+            isResting = false
+        }
+        
+        // Accumulate visual shake energy
         shakeEnergy = min(1.0, shakeEnergy + intensity * 0.3)
         
         // Apply force to all elements based on acceleration
@@ -383,7 +432,7 @@ final class KaleidoscopeState {
             // Add rotation based on shake
             seedElements[i].rotationSpeed += Double.random(in: -15...15) * intensity
             
-            // Boost energy
+            // Boost element energy
             seedElements[i].energy = min(1.0, seedElements[i].energy + intensity * 0.8)
         }
         
