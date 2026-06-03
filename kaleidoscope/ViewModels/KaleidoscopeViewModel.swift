@@ -39,17 +39,25 @@ final class KaleidoscopeViewModel {
         }
     }
     
+    func handleRotation(_ rotation: Angle) {
+        state.globalRotation = rotation.radians * 0.5
+    }
+    
     func randomize() {
         hapticsManager.patternChange()
         state.randomize(with: currentPalette.colors)
     }
     
-    func handleTap(at position: CGPoint, normalizedPosition: CGPoint) {
+    func addTapRipple(at position: CGPoint, in size: CGSize) {
         hapticsManager.lightTap()
+        let normalizedPosition = CGPoint(
+            x: position.x / size.width,
+            y: position.y / size.height
+        )
         state.addTapRipple(at: position, normalizedPosition: normalizedPosition)
     }
     
-    func selectPalette(_ palette: ColorPalette) {
+    func changePalette(to palette: ColorPalette) {
         guard palette != currentPalette else { return }
         hapticsManager.mediumTap()
         currentPalette = palette
@@ -70,8 +78,21 @@ final class KaleidoscopeViewModel {
         }
     }
     
+    func evolveAnimation(deltaTime: Double) {
+        state.evolve(deltaTime: deltaTime)
+    }
+    
     @MainActor
-    func saveScreenshot(from renderer: ImageRenderer<some View>) {
+    func saveScreenshot(size: CGSize) {
+        let renderer = ImageRenderer(content:
+            KaleidoscopeCanvasView(
+                state: state,
+                size: size,
+                currentTime: Date()
+            )
+        )
+        renderer.scale = 3.0
+        
         guard let uiImage = renderer.uiImage else {
             saveError = "Failed to render image"
             return

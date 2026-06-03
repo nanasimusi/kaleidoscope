@@ -10,12 +10,13 @@ final class MotionManager {
     var currentAcceleration: CGPoint = .zero
     var currentIntensity: Double = 0
     var isAvailable: Bool = false
+    var onShake: (() -> Void)?
     
     init() {
         isAvailable = motionManager.isAccelerometerAvailable
     }
     
-    func startMotionUpdates(onMotion: @escaping (CGPoint, Double) -> Void) {
+    func startMonitoring() {
         guard motionManager.isAccelerometerAvailable else { return }
         
         motionManager.accelerometerUpdateInterval = 1.0 / 60.0
@@ -55,12 +56,15 @@ final class MotionManager {
                 self.currentAcceleration = direction
                 self.currentIntensity = intensity
                 
-                onMotion(direction, intensity)
+                // Trigger shake callback if available
+                if intensity > 0.5 {
+                    self.onShake?()
+                }
             }
         }
     }
     
-    func stopMotionUpdates() {
+    func stopMonitoring() {
         motionManager.stopAccelerometerUpdates()
         lastAcceleration = nil
         currentAcceleration = .zero
@@ -68,6 +72,6 @@ final class MotionManager {
     }
     
     deinit {
-        stopMotionUpdates()
+        stopMonitoring()
     }
 }

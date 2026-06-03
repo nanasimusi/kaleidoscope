@@ -41,6 +41,7 @@ enum KaleidoscopeRenderer {
         
         switch element.type {
         case .circle:
+            // 円形系の形状は全てOrbとして描画
             drawSoftOrb(
                 context: &context,
                 center: elementCenter,
@@ -50,6 +51,7 @@ enum KaleidoscopeRenderer {
             )
             
         case .curve:
+            // 曲線系の形状はRibbonとして描画
             drawFlowingRibbon(
                 context: &context,
                 center: elementCenter,
@@ -60,6 +62,7 @@ enum KaleidoscopeRenderer {
             )
             
         case .polygon:
+            // 多角形系・花びらはFacetとして描画
             drawCrystalFacet(
                 context: &context,
                 center: elementCenter,
