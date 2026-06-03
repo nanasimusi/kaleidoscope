@@ -82,6 +82,10 @@ final class KaleidoscopeViewModel {
         state.evolve(deltaTime: deltaTime)
     }
     
+    func handleTiltChange(_ tilt: CGPoint) {
+        state.deviceTilt = tilt
+    }
+    
     @MainActor
     func saveScreenshot(size: CGSize) {
         let renderer = ImageRenderer(content:

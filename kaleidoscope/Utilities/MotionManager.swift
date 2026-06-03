@@ -9,15 +9,24 @@ final class MotionManager {
     
     var currentAcceleration: CGPoint = .zero
     var currentIntensity: Double = 0
+    var currentTilt: CGPoint = .zero  // X: roll (左右), Y: pitch (前後)
     var isAvailable: Bool = false
     var onShake: (() -> Void)?
+    var onTiltChange: ((CGPoint) -> Void)?
     
     init() {
-        isAvailable = motionManager.isAccelerometerAvailable
+        isAvailable = motionManager.isAccelerometerAvailable && motionManager.isDeviceMotionAvailable
     }
     
     func startMonitoring() {
-        guard motionManager.isAccelerometerAvailable else { return }
+        print("=== MotionManager: Starting monitoring ===")
+        print("Accelerometer available: \(motionManager.isAccelerometerAvailable)")
+        print("Device motion available: \(motionManager.isDeviceMotionAvailable)")
+        
+        guard motionManager.isAccelerometerAvailable else {
+            print("ERROR: Accelerometer not available!")
+            return
+        }
         
         motionManager.accelerometerUpdateInterval = 1.0 / 60.0
         
@@ -62,13 +71,64 @@ final class MotionManager {
                 }
             }
         }
+        
+        // デバイスの傾きを継続的に監視（ジャイロスコープ統合データ）
+        guard motionManager.isDeviceMotionAvailable else {
+            print("ERROR: Device motion not available!")
+            return
+        }
+        
+        print("Starting device motion updates...")
+        motionManager.deviceMotionUpdateInterval = 1.0 / 60.0
+        
+        motionManager.startDeviceMotionUpdates(to: .main) { [weak self] motion, error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                print("Device motion error: \(error)")
+                return
+            }
+            
+            guard let motion = motion else {
+                print("No motion data received")
+                return
+            }
+            
+            // デバイスの姿勢から傾きを取得
+            let attitude = motion.attitude
+            
+            // pitch: 前後の傾き (-π/2 ~ π/2)
+            // roll: 左右の傾き (-π ~ π)
+            let pitch = attitude.pitch
+            let roll = attitude.roll
+            
+            // 自然な範囲に正規化 (-1.0 ~ 1.0)
+            // 縦持ち時の傾きを基準に調整
+            let normalizedRoll = max(-1.0, min(1.0, roll / (Double.pi / 3)))  // ±60度で最大
+            let normalizedPitch = max(-1.0, min(1.0, pitch / (Double.pi / 4))) // ±45度で最大
+            
+            let tilt = CGPoint(
+                x: normalizedRoll,
+                y: normalizedPitch
+            )
+            
+            // 初回のみログ出力
+            if self.currentTilt == .zero {
+                print("✓ First tilt detected: roll=\(normalizedRoll), pitch=\(normalizedPitch)")
+            }
+            
+            self.currentTilt = tilt
+            self.onTiltChange?(tilt)
+        }
     }
     
     func stopMonitoring() {
         motionManager.stopAccelerometerUpdates()
+        motionManager.stopDeviceMotionUpdates()
         lastAcceleration = nil
         currentAcceleration = .zero
         currentIntensity = 0
+        currentTilt = .zero
     }
     
     deinit {

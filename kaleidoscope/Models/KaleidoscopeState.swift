@@ -28,19 +28,19 @@ struct SeedElement: Identifiable {
     var morphProgress: Double = 1.0
     
     static func random(colors: [Color], colorIndex: Int, depth: Double) -> SeedElement {
-        // 幻想的で有機的な形状を重視した重み付け
+        // 水墨画の筆致を意識：細い線と小さな点を中心に
         let types: [ElementType] = [
-            .circle, .circle, .circle,           // 球体は基本
-            .nebula, .nebula, .nebula,           // 星雲は多め
-            .curve, .curve,                      // 流線
-            .tendril, .tendril,                  // 触手
-            .droplet,                            // 水滴
-            .petal, .petal                       // 花びら
+            .circle,                                              // 小さな点（墨の飛沫）
+            .curve, .curve, .curve, .curve, .curve, .curve,       // 細い筆線（圧倒的に多く）
+            .tendril, .tendril, .tendril, .tendril,               // 繊細な蔓線
+            .droplet,                                             // ごく小さな滴
+            .petal                                                // 薄い花びら
         ]
         
-        let sizeVariation = depth < 0.3 ? CGFloat.random(in: 0.004...0.03) :
-                           depth < 0.7 ? CGFloat.random(in: 0.01...0.05) :
-                                        CGFloat.random(in: 0.02...0.08)
+        // 全体的にサイズを小さく、余白を生かす
+        let sizeVariation = depth < 0.3 ? CGFloat.random(in: 0.002...0.012) :
+                           depth < 0.7 ? CGFloat.random(in: 0.004...0.020) :
+                                        CGFloat.random(in: 0.006...0.030)
         
         return SeedElement(
             position: CGPoint(
@@ -52,11 +52,11 @@ struct SeedElement: Identifiable {
             rotation: Angle(degrees: Double.random(in: 0...360)),
             type: types.randomElement()!,
             velocity: CGPoint(
-                x: CGFloat.random(in: -0.002...0.002),
-                y: CGFloat.random(in: -0.002...0.002)
+                x: CGFloat.random(in: -0.0015...0.0015),
+                y: CGFloat.random(in: -0.0015...0.0015)
             ),
-            rotationSpeed: Double.random(in: -4...4),
-            sizeOscillation: Double.random(in: 0.15...0.5),
+            rotationSpeed: Double.random(in: -2.5...2.5),
+            sizeOscillation: Double.random(in: 0.1...0.35),
             phaseOffset: Double.random(in: 0...Double.pi * 2),
             colorIndex: colorIndex,
             depth: depth
@@ -97,6 +97,10 @@ final class KaleidoscopeState {
     var motionDirection: CGPoint = .zero
     var shakeEnergy: Double = 0
     
+    // Device tilt detection
+    var deviceTilt: CGPoint = .zero  // X: roll (左右), Y: pitch (前後)
+    var smoothTilt: CGPoint = .zero  // スムーズ補間された傾き
+    
     // Kinetic energy system - controls overall animation speed
     var kineticEnergy: Double = 1.0  // 1.0 = full speed, 0.0 = stopped
     var rotationVelocity: Double = 0.02  // Current rotation speed
@@ -110,7 +114,8 @@ final class KaleidoscopeState {
     }
     
     func randomize(with colors: [Color]) {
-        let elementCount = Int.random(in: 40...60)
+        // 水墨画のように少ない要素で余白を生かす
+        let elementCount = Int.random(in: 30...50)
         seedElements = (0..<elementCount).map { index in
             let depth = Double(index) / Double(elementCount)
             return SeedElement.random(colors: colors, colorIndex: index, depth: depth)
@@ -164,8 +169,8 @@ final class KaleidoscopeState {
         let smoothDelta = min(deltaTime, 0.033)
         
         // === KINETIC ENERGY DECAY SYSTEM ===
-        // Gradually slow down over time (like a spinning top)
-        let decayRate = 0.015  // How fast energy decays (lower = slower decay)
+        // Gradually slow down over time (like a spinning top) - 極めて緩やかに
+        let decayRate = 0.008  // さらに遅い減衰で永続的な滑らかさ
         kineticEnergy *= (1.0 - decayRate * smoothDelta * 60)
         
         // Clamp to minimum threshold
@@ -176,8 +181,8 @@ final class KaleidoscopeState {
             isResting = false
         }
         
-        // Rotation velocity also decays
-        rotationVelocity *= (1.0 - decayRate * 0.8 * smoothDelta * 60)
+        // Rotation velocity also decays - より緩やかに
+        rotationVelocity *= (1.0 - decayRate * 0.5 * smoothDelta * 60)
         if rotationVelocity < 0.0005 {
             rotationVelocity = 0
         }
@@ -185,24 +190,29 @@ final class KaleidoscopeState {
         // Apply kinetic energy to animation speed
         let effectiveEnergy = kineticEnergy * kineticEnergy  // Quadratic for smoother stop
         
-        // Animation phase advances based on kinetic energy
-        let basePhaseSpeed = 0.3 + Foundation.sin(animationPhase * 0.1) * 0.05
+        // Animation phase advances based on kinetic energy - より繊細な速度
+        let basePhaseSpeed = 0.25 + Foundation.sin(animationPhase * 0.08) * 0.04
         animationPhase += smoothDelta * basePhaseSpeed * effectiveEnergy
         
-        // Rotation with energy-based speed
-        let breathCycle = Foundation.sin(animationPhase * 0.15) * 0.008
-        targetGlobalRotation += smoothDelta * rotationVelocity * effectiveEnergy
+        // Rotation with energy-based speed - 極めて滑らかな回転
+        let breathCycle = Foundation.sin(animationPhase * 0.12) * 0.006
+        targetGlobalRotation += smoothDelta * rotationVelocity * effectiveEnergy * 0.75
         
-        // Critically damped spring for rotation
-        let omega = 3.0
+        // Critically damped spring for rotation - より滑らかに
+        let omega = 2.5
         let rotationDiff = targetGlobalRotation - globalRotation
         let springForce = omega * omega * rotationDiff
-        globalRotation += springForce * smoothDelta * (0.3 + effectiveEnergy * 0.7)
+        globalRotation += springForce * smoothDelta * (0.4 + effectiveEnergy * 0.6)
         
         // Exponential smoothing for touch
         let touchDecay = exp(-8.0 * smoothDelta)
         smoothTouchOffset.x = touchOffset.x + (smoothTouchOffset.x - touchOffset.x) * touchDecay
         smoothTouchOffset.y = touchOffset.y + (smoothTouchOffset.y - touchOffset.y) * touchDecay
+        
+        // Exponential smoothing for device tilt (極めて滑らかに)
+        let tiltDecay = exp(-3.5 * smoothDelta)
+        smoothTilt.x = deviceTilt.x + (smoothTilt.x - deviceTilt.x) * tiltDecay
+        smoothTilt.y = deviceTilt.y + (smoothTilt.y - deviceTilt.y) * tiltDecay
         
         // Only evolve patterns when there's enough energy
         if kineticEnergy > 0.3 {
@@ -231,40 +241,55 @@ final class KaleidoscopeState {
         for i in seedElements.indices {
             var element = seedElements[i]
             
-            // Energy decay with kinetic influence
-            let energyDecay = exp(-2.0 * smoothDelta)
+            // Energy decay with kinetic influence - より緩やかに
+            let energyDecay = exp(-1.5 * smoothDelta)
             element.energy *= energyDecay
             if element.energy < 0.001 { element.energy = 0 }
             
             let phase = animationPhase + element.phaseOffset
             let energyBoost = 1.0 + element.energy * 1.5
             
-            // Flow is scaled by kinetic energy
+            // 生命のような複雑な有機的フロー - 呼吸する海流のイメージ
             let flowScale = effectiveEnergy * 0.002 * energyBoost
-            let freq1 = 0.12 + element.depth * 0.05
-            let freq2 = 0.23 + element.depth * 0.08
-            let freq3 = 0.07 + element.depth * 0.03
             
-            let flowX = (Foundation.sin(phase * freq1) * 0.4 +
-                        Foundation.sin(phase * freq2 + element.phaseOffset) * 0.3 +
-                        Foundation.sin(phase * freq3 + 2.5) * 0.3) * flowScale
+            // 各エレメントごとに異なる周波数（個性を持たせる）
+            let freq1 = 0.11 + element.depth * 0.04 + Foundation.sin(element.phaseOffset) * 0.02
+            let freq2 = 0.22 + element.depth * 0.07 + Foundation.cos(element.phaseOffset * 1.3) * 0.03
+            let freq3 = 0.06 + element.depth * 0.025 + Foundation.sin(element.phaseOffset * 0.7) * 0.015
+            let freq4 = 0.15 + element.depth * 0.055 + Foundation.cos(element.phaseOffset * 1.7) * 0.025
             
-            let flowY = (Foundation.cos(phase * freq1 * 0.9) * 0.4 +
-                        Foundation.cos(phase * freq2 * 1.1 + element.phaseOffset) * 0.3 +
-                        Foundation.cos(phase * freq3 * 0.8 + 1.7) * 0.3) * flowScale
+            // 多層的な波の重ね合わせ（海の波のように）
+            var flowX = (Foundation.sin(phase * freq1) * 0.35 +
+                        Foundation.sin(phase * freq2 + element.phaseOffset) * 0.28 +
+                        Foundation.sin(phase * freq3 + 2.5) * 0.22 +
+                        Foundation.sin(phase * freq4 + 1.8) * 0.15) * flowScale
             
-            // Velocity decay is faster when kinetic energy is low
-            let velocityDecayRate = 3.5 + (1.0 - effectiveEnergy) * 5.0
+            var flowY = (Foundation.cos(phase * freq1 * 0.88) * 0.35 +
+                        Foundation.cos(phase * freq2 * 1.12 + element.phaseOffset) * 0.28 +
+                        Foundation.cos(phase * freq3 * 0.76 + 1.7) * 0.22 +
+                        Foundation.cos(phase * freq4 * 1.25 + 0.9) * 0.15) * flowScale
+            
+            // デバイス傾きによる重力効果（目に見える自然な影響）
+            // 深度によって傾きへの反応性を変える（奥のものほど遅く動く）
+            let tiltResponsiveness = (1.0 - element.depth * 0.3) * effectiveEnergy
+            let tiltStrength = 0.025 * tiltResponsiveness  // より明確な影響
+            
+            // 傾きに基づく重力的な力を加える（重力のように働く）
+            flowX += smoothTilt.x * tiltStrength * energyBoost
+            flowY += smoothTilt.y * tiltStrength * energyBoost
+            
+            // より滑らかで自然な速度減衰（生物の動きのように）
+            let velocityDecayRate = 2.2 + (1.0 - effectiveEnergy) * 2.8
             let velocityDecay = exp(-velocityDecayRate * smoothDelta)
             element.velocity.x *= velocityDecay
             element.velocity.y *= velocityDecay
             
-            // Position integration scaled by energy
-            let responsiveness = (0.92 - element.depth * 0.15) * effectiveEnergy
-            let positionDecay = exp(-6.0 * smoothDelta * max(0.1, responsiveness))
+            // 極めて滑らかな位置統合（慣性を保ち、カクつきを完全に排除）
+            let responsiveness = (0.96 - element.depth * 0.08) * effectiveEnergy
+            let positionDecay = exp(-3.5 * smoothDelta * max(0.2, responsiveness))
             
-            let targetX = element.position.x + (element.velocity.x + flowX) * 25
-            let targetY = element.position.y + (element.velocity.y + flowY) * 25
+            let targetX = element.position.x + (element.velocity.x + flowX) * 20
+            let targetY = element.position.y + (element.velocity.y + flowY) * 20
             
             element.position.x = targetX + (element.position.x - targetX) * positionDecay
             element.position.y = targetY + (element.position.y - targetY) * positionDecay
@@ -299,12 +324,20 @@ final class KaleidoscopeState {
                 element.position.y -= penetration * 0.1
             }
             
-            // Organic rotation with varying speed
-            let rotationDecay = exp(-2.0 * smoothDelta)
+            // 生命のような有機的な回転（呼吸するように）- より滑らかに
+            let rotationDecay = exp(-1.4 * smoothDelta)
             element.rotationSpeed *= rotationDecay
             
-            let baseRotation = Foundation.sin(phase * 0.3 + element.phaseOffset) * 0.5
-            element.rotation += Angle(degrees: (element.rotationSpeed + baseRotation) * smoothDelta * 60)
+            // 複数の周波数を組み合わせた自然な回転変動
+            var baseRotation = (Foundation.sin(phase * 0.28 + element.phaseOffset) * 0.42 +
+                               Foundation.cos(phase * 0.17 + element.phaseOffset * 1.3) * 0.28 +
+                               Foundation.sin(phase * 0.35 + element.phaseOffset * 0.7) * 0.18)
+            
+            // 傾きによる回転への影響（左右の傾きで回転速度が変化）- より強く
+            let tiltRotationInfluence = smoothTilt.x * 0.35 * (1.0 - element.depth * 0.25)
+            baseRotation += tiltRotationInfluence
+            
+            element.rotation += Angle(degrees: (element.rotationSpeed + baseRotation) * smoothDelta * 45)
             
             seedElements[i] = element
         }

@@ -83,9 +83,7 @@ struct KaleidoscopeCanvasView: View {
         // Layer 7: Micro-detail shimmer particles
         drawMicroShimmer(context: context, size: canvasSize, center: center, phase: phase)
         
-        // Layer 8: Tap ripples with chromatic effect
-        drawTapRipples(context: context, size: canvasSize, phase: phase)
-        drawChromaticRipples(context: context, size: canvasSize, phase: phase)
+        // Layer 8: Tap ripples removed - now using localized distortion effect
         
         drawAmbientParticles(context: context, size: canvasSize, phase: phase, layer: 1)
         
@@ -264,23 +262,14 @@ struct KaleidoscopeCanvasView: View {
     private func drawDeepBackground(context: GraphicsContext, size: CGSize, center: CGPoint, phase: Double) {
         let colors = state.currentPaletteColors
         let color1 = colors.first ?? .black
-        let color2 = colors.count > 1 ? colors[1] : .black
-        let color3 = colors.count > 2 ? colors[2] : color1
-        let color4 = colors.count > 3 ? colors[3] : color2
         
-        // より深い呼吸効果
-        let breath1 = Foundation.sin(phase * 0.06) * 0.025 + 0.055
-        let breath2 = Foundation.sin(phase * 0.09 + 1.5) * 0.018 + 0.042
-        let breath3 = Foundation.sin(phase * 0.04 + 2.8) * 0.012 + 0.028
+        // 水墨画のような深く静かな呼吸
+        let breath = Foundation.sin(phase * 0.04) * 0.015 + 0.025
         
-        // より豊かな多層背景グラデーション
+        // シンプルで深い背景（黒と紺を生かす）
         let bgGradient = Gradient(stops: [
-            .init(color: color1.opacity(breath1 + breath2 * 0.8), location: 0.0),
-            .init(color: color2.opacity(breath1 * 0.9 + breath3), location: 0.15),
-            .init(color: color3.opacity(breath2 * 0.7 + breath3 * 0.6), location: 0.35),
-            .init(color: color4.opacity(breath3 * 0.6), location: 0.55),
-            .init(color: Color(white: 0.015), location: 0.75),
-            .init(color: Color(white: 0.005), location: 0.9),
+            .init(color: color1.opacity(breath * 0.4), location: 0.0),
+            .init(color: Color(white: 0.008), location: 0.4),
             .init(color: .black, location: 1.0)
         ])
         
@@ -378,18 +367,47 @@ struct KaleidoscopeCanvasView: View {
     ) {
         let elementPhase = phase + element.phaseOffset
         
-        let flowFreq = 0.25 + element.depth * 0.15
-        let flowX = Foundation.sin(elementPhase * flowFreq) * 0.08
-        let flowY = Foundation.cos(elementPhase * flowFreq * 0.9) * 0.08
+        // より繊細で複雑な流れ（個性を持たせる）
+        let flowFreq1 = 0.23 + element.depth * 0.13 + Foundation.sin(element.phaseOffset) * 0.04
+        let flowFreq2 = 0.17 + element.depth * 0.09 + Foundation.cos(element.phaseOffset * 1.3) * 0.03
+        
+        var flowX = (Foundation.sin(elementPhase * flowFreq1) * 0.07 +
+                    Foundation.cos(elementPhase * flowFreq2 + element.phaseOffset) * 0.04)
+        var flowY = (Foundation.cos(elementPhase * flowFreq1 * 0.87) * 0.07 +
+                    Foundation.sin(elementPhase * flowFreq2 * 1.15 + element.phaseOffset) * 0.04)
+        
+        // タップ周辺の局所的な歪み効果
+        for ripple in state.tapRipples {
+            let age = state.animationPhase - ripple.startTime
+            if age < 2.0 {  // 2秒間のみ影響
+                let dx = element.position.x - ripple.normalizedPosition.x
+                let dy = element.position.y - ripple.normalizedPosition.y
+                let distance = sqrt(dx * dx + dy * dy)
+                
+                // タップ周辺0.3の範囲内のみ影響
+                if distance < 0.3 {
+                    let influence = (1.0 - distance / 0.3) * (1.0 - age / 2.0)
+                    let angle = atan2(dy, dx)
+                    
+                    // 波紋のような押し出し効果
+                    let pushStrength = Foundation.sin(age * 8.0) * influence * 0.15
+                    flowX += Foundation.cos(angle) * pushStrength
+                    flowY += Foundation.sin(angle) * pushStrength
+                }
+            }
+        }
         
         let pos = CGPoint(
             x: center.x + (element.position.x - 0.5 + flowX) * radius,
             y: center.y + (element.position.y - 0.5 + flowY) * radius
         )
         
+        // 生命のような複雑な呼吸（複数の周波数）
         let baseSize = element.size * radius
-        let breatheFreq = 0.4 + element.depth * 0.2
-        let breathe = 1.0 + Foundation.sin(elementPhase * breatheFreq) * 0.15
+        let breatheFreq1 = 0.38 + element.depth * 0.18
+        let breatheFreq2 = 0.25 + element.depth * 0.12
+        let breathe = 1.0 + (Foundation.sin(elementPhase * breatheFreq1) * 0.11 +
+                            Foundation.cos(elementPhase * breatheFreq2 + element.phaseOffset) * 0.07)
         let energyScale = 1.0 + element.energy * 0.5
         let size = baseSize * breathe * energyScale
         
@@ -416,18 +434,20 @@ struct KaleidoscopeCanvasView: View {
         color: Color,
         phase: Double
     ) {
-        // Subtle breathing animation
-        let breathe = 1.0 + Foundation.sin(phase * 0.6) * 0.08
+        // 生命のような複雑な呼吸
+        let breathe = 1.0 + (Foundation.sin(phase * 0.55) * 0.07 +
+                            Foundation.cos(phase * 0.38 + 1.2) * 0.045 +
+                            Foundation.sin(phase * 0.72 + 0.7) * 0.03)
         let adjustedRadius = radius * breathe
         
-        // Outer ethereal glow layers (more gradual falloff)
-        let glowLayers = 6
+        // 控えめなグロー（水墨画の墨の飛沫のように）
+        let glowLayers = 3
         for i in (0..<glowLayers).reversed() {
             let t = Double(i) / Double(glowLayers - 1)
-            let r = adjustedRadius * (1.0 + t * 2.5)
+            let r = adjustedRadius * (1.0 + t * 1.2)
             // Gaussian-like falloff
-            let falloff = exp(-t * t * 2.0)
-            let alpha = falloff * 0.25
+            let falloff = exp(-t * t * 2.5)
+            let alpha = falloff * 0.12
             
             let gradient = Gradient(stops: [
                 .init(color: color.opacity(alpha), location: 0.0),
@@ -483,8 +503,8 @@ struct KaleidoscopeCanvasView: View {
         rotation: Angle,
         phase: Double
     ) {
-        let segments = 32
-        let length = radius * 4.0
+        let segments = 48  // セグメント数を増やして滑らかに
+        let length = radius * 4.5
         
         var points: [CGPoint] = []
         var widths: [CGFloat] = []
@@ -493,17 +513,18 @@ struct KaleidoscopeCanvasView: View {
             let t = Double(i) / Double(segments)
             let angle = rotation.radians + t * Double.pi
             
-            // Multi-harmonic wave for organic flowing motion
-            let wave1 = Foundation.sin(phase * 0.4 + t * Double.pi * 4) * radius * 0.4
-            let wave2 = Foundation.cos(phase * 0.3 + t * Double.pi * 2.5) * radius * 0.25
-            let wave3 = Foundation.sin(phase * 0.55 + t * Double.pi * 6) * radius * 0.15
+            // より繊細な多重波形
+            let wave1 = Foundation.sin(phase * 0.38 + t * Double.pi * 4.2) * radius * 0.38
+            let wave2 = Foundation.cos(phase * 0.28 + t * Double.pi * 2.7) * radius * 0.23
+            let wave3 = Foundation.sin(phase * 0.52 + t * Double.pi * 6.3) * radius * 0.14
+            let wave4 = Foundation.cos(phase * 0.43 + t * Double.pi * 3.8) * radius * 0.11
             
             let perpAngle = angle + Double.pi / 2
-            let offset = wave1 + wave2 + wave3
+            let offset = wave1 + wave2 + wave3 + wave4
             
-            // Tapered width - thicker in middle, thinner at ends
+            // 水墨画の筆のように極めて細い線
             let taper = Foundation.sin(t * Double.pi)
-            widths.append(radius * 0.08 * taper + radius * 0.02)
+            widths.append(radius * 0.03 * taper + radius * 0.008)
             
             let x = center.x + Foundation.cos(angle) * length * (t - 0.5) + Foundation.cos(perpAngle) * offset
             let y = center.y + Foundation.sin(angle) * length * (t - 0.5) + Foundation.sin(perpAngle) * offset
@@ -513,12 +534,12 @@ struct KaleidoscopeCanvasView: View {
         
         guard points.count >= 2 else { return }
         
-        // Outer glow layers with Gaussian falloff
-        for layer in (0..<5).reversed() {
-            let t = Double(layer) / 4.0
-            let falloff = exp(-t * t * 1.5)
-            let alpha = 0.06 * falloff
-            let width = radius * (0.25 + t * 0.4)
+        // 控えめなグロー（水墨画の滲みのように）
+        for layer in (0..<4).reversed() {
+            let t = Double(layer) / 3.0
+            let falloff = exp(-t * t * 2.0)
+            let alpha = 0.03 * falloff
+            let width = radius * (0.12 + t * 0.18)
             
             var path = Path()
             path.move(to: points[0])
@@ -786,9 +807,9 @@ struct KaleidoscopeCanvasView: View {
         rotation: Angle,
         phase: Double
     ) {
-        // 触手・蔓のような有機的な曲線
-        let segments = 48
-        let length = radius * 5.0
+        // 触手・蔓のような有機的な曲線 - より繊細に
+        let segments = 64  // セグメント数を増やして滑らかに
+        let length = radius * 5.5
         
         var points: [CGPoint] = []
         
@@ -796,17 +817,18 @@ struct KaleidoscopeCanvasView: View {
             let t = Double(i) / Double(segments)
             let angle = rotation.radians + t * Double.pi * 1.5
             
-            // より複雑な多重波形
-            let wave1 = Foundation.sin(phase * 0.5 + t * Double.pi * 5) * radius * 0.5
-            let wave2 = Foundation.cos(phase * 0.4 + t * Double.pi * 3.5) * radius * 0.3
-            let wave3 = Foundation.sin(phase * 0.6 + t * Double.pi * 7) * radius * 0.2
-            let wave4 = Foundation.cos(phase * 0.35 + t * Double.pi * 4.5) * radius * 0.15
+            // より複雑で繊細な多重波形
+            let wave1 = Foundation.sin(phase * 0.45 + t * Double.pi * 5.5) * radius * 0.48
+            let wave2 = Foundation.cos(phase * 0.38 + t * Double.pi * 3.8) * radius * 0.28
+            let wave3 = Foundation.sin(phase * 0.58 + t * Double.pi * 7.2) * radius * 0.18
+            let wave4 = Foundation.cos(phase * 0.33 + t * Double.pi * 4.7) * radius * 0.14
+            let wave5 = Foundation.sin(phase * 0.52 + t * Double.pi * 9.1) * radius * 0.09
             
             let perpAngle = angle + Double.pi / 2
-            let offset = wave1 + wave2 + wave3 + wave4
+            let offset = wave1 + wave2 + wave3 + wave4 + wave5
             
             // より自然な細まり
-            let taper = Foundation.sin(t * Double.pi) * (1.0 - t * 0.3)
+            let taper = Foundation.sin(t * Double.pi) * (1.0 - t * 0.25)
             
             let x = center.x + Foundation.cos(angle) * length * (t - 0.5) + Foundation.cos(perpAngle) * offset
             let y = center.y + Foundation.sin(angle) * length * (t - 0.5) + Foundation.sin(perpAngle) * offset
@@ -816,12 +838,12 @@ struct KaleidoscopeCanvasView: View {
         
         guard points.count >= 2 else { return }
         
-        // 多層のグローエフェクト
-        for layer in (0..<6).reversed() {
-            let t = Double(layer) / 5.0
-            let falloff = exp(-t * t * 2.0)
-            let alpha = 0.08 * falloff
-            let width = radius * (0.3 + t * 0.5)
+        // 水墨画の滲みのように控えめなグロー
+        for layer in (0..<4).reversed() {
+            let t = Double(layer) / 3.0
+            let falloff = exp(-t * t * 2.5)
+            let alpha = 0.04 * falloff
+            let width = radius * (0.15 + t * 0.20)
             
             var path = Path()
             path.move(to: points[0])
