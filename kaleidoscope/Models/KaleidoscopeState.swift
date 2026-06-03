@@ -2,9 +2,12 @@ import SwiftUI
 import Foundation
 
 enum ElementType: CaseIterable {
-    case circle
-    case curve
-    case polygon
+    case circle      // 発光する球体
+    case curve       // 流れる曲線
+    case nebula      // 星雲のようなぼんやりした形
+    case tendril     // 触手・蔓のような有機的な形
+    case droplet     // 水滴・しずく形
+    case petal       // 花びら形
 }
 
 struct SeedElement: Identifiable {
@@ -25,11 +28,19 @@ struct SeedElement: Identifiable {
     var morphProgress: Double = 1.0
     
     static func random(colors: [Color], colorIndex: Int, depth: Double) -> SeedElement {
-        let types: [ElementType] = [.circle, .circle, .circle, .circle, .curve, .curve, .curve, .polygon]
+        // 幻想的で有機的な形状を重視した重み付け
+        let types: [ElementType] = [
+            .circle, .circle, .circle,           // 球体は基本
+            .nebula, .nebula, .nebula,           // 星雲は多め
+            .curve, .curve,                      // 流線
+            .tendril, .tendril,                  // 触手
+            .droplet,                            // 水滴
+            .petal, .petal                       // 花びら
+        ]
         
-        let sizeVariation = depth < 0.3 ? CGFloat.random(in: 0.003...0.025) :
-                           depth < 0.7 ? CGFloat.random(in: 0.008...0.045) :
-                                        CGFloat.random(in: 0.015...0.07)
+        let sizeVariation = depth < 0.3 ? CGFloat.random(in: 0.004...0.03) :
+                           depth < 0.7 ? CGFloat.random(in: 0.01...0.05) :
+                                        CGFloat.random(in: 0.02...0.08)
         
         return SeedElement(
             position: CGPoint(

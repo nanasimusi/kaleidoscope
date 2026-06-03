@@ -264,19 +264,23 @@ struct KaleidoscopeCanvasView: View {
     private func drawDeepBackground(context: GraphicsContext, size: CGSize, center: CGPoint, phase: Double) {
         let colors = state.currentPaletteColors
         let color1 = colors.first ?? .black
-        let color2 = colors.count > 2 ? colors[2] : .black
-        let color3 = colors.count > 3 ? colors[3] : color1
+        let color2 = colors.count > 1 ? colors[1] : .black
+        let color3 = colors.count > 2 ? colors[2] : color1
+        let color4 = colors.count > 3 ? colors[3] : color2
         
-        // Multi-frequency breathing for organic feel
-        let breath1 = Foundation.sin(phase * 0.08) * 0.015 + 0.04
-        let breath2 = Foundation.sin(phase * 0.12 + 1.0) * 0.01 + 0.03
+        // より深い呼吸効果
+        let breath1 = Foundation.sin(phase * 0.06) * 0.025 + 0.055
+        let breath2 = Foundation.sin(phase * 0.09 + 1.5) * 0.018 + 0.042
+        let breath3 = Foundation.sin(phase * 0.04 + 2.8) * 0.012 + 0.028
         
-        // Rich layered background gradient
+        // より豊かな多層背景グラデーション
         let bgGradient = Gradient(stops: [
-            .init(color: color1.opacity(breath1 + breath2), location: 0.0),
-            .init(color: color2.opacity(breath1 * 0.7), location: 0.25),
-            .init(color: color3.opacity(breath2 * 0.5), location: 0.5),
-            .init(color: Color(white: 0.02), location: 0.75),
+            .init(color: color1.opacity(breath1 + breath2 * 0.8), location: 0.0),
+            .init(color: color2.opacity(breath1 * 0.9 + breath3), location: 0.15),
+            .init(color: color3.opacity(breath2 * 0.7 + breath3 * 0.6), location: 0.35),
+            .init(color: color4.opacity(breath3 * 0.6), location: 0.55),
+            .init(color: Color(white: 0.015), location: 0.75),
+            .init(color: Color(white: 0.005), location: 0.9),
             .init(color: .black, location: 1.0)
         ])
         
@@ -286,16 +290,17 @@ struct KaleidoscopeCanvasView: View {
                 bgGradient,
                 center: center,
                 startRadius: 0,
-                endRadius: max(size.width, size.height) * 1.1
+                endRadius: max(size.width, size.height) * 1.15
             )
         )
         
-        // Subtle vignette for depth
+        // より深いビネット効果
         let vignetteGradient = Gradient(stops: [
             .init(color: .clear, location: 0.0),
-            .init(color: .clear, location: 0.6),
-            .init(color: .black.opacity(0.3), location: 0.85),
-            .init(color: .black.opacity(0.6), location: 1.0)
+            .init(color: .clear, location: 0.5),
+            .init(color: .black.opacity(0.2), location: 0.7),
+            .init(color: .black.opacity(0.5), location: 0.85),
+            .init(color: .black.opacity(0.75), location: 1.0)
         ])
         
         context.fill(
@@ -304,7 +309,7 @@ struct KaleidoscopeCanvasView: View {
                 vignetteGradient,
                 center: center,
                 startRadius: 0,
-                endRadius: max(size.width, size.height) * 0.8
+                endRadius: max(size.width, size.height) * 0.85
             )
         )
     }
@@ -391,10 +396,16 @@ struct KaleidoscopeCanvasView: View {
         switch element.type {
         case .circle:
             drawLuminousOrb(context: &context, center: pos, radius: size, color: element.color, phase: elementPhase)
+        case .nebula:
+            drawNebula(context: &context, center: pos, radius: size, color: element.color, phase: elementPhase)
         case .curve:
             drawEtherealThread(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
-        case .polygon:
-            drawCrystalShard(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
+        case .tendril:
+            drawTendril(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
+        case .droplet:
+            drawDroplet(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
+        case .petal:
+            drawPetal(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
         }
     }
     
@@ -713,6 +724,328 @@ struct KaleidoscopeCanvasView: View {
                 endRadius: highlight2Radius
             )
         )
+    }
+    
+    private func drawNebula(
+        context: inout GraphicsContext,
+        center: CGPoint,
+        radius: CGFloat,
+        color: Color,
+        phase: Double
+    ) {
+        // 星雲のようなぼんやりした形状
+        let breathe = 1.0 + Foundation.sin(phase * 0.5) * 0.12
+        let adjustedRadius = radius * breathe * 1.8
+        
+        // 多層のグロー効果でガス状の見た目を作る
+        for i in (0..<8).reversed() {
+            let t = Double(i) / 7.0
+            let r = adjustedRadius * (0.4 + t * 1.2)
+            let angle = phase * 0.2 + t * Double.pi * 0.5
+            
+            // 非対称な形状のためのオフセット
+            let offsetX = Foundation.cos(angle) * r * 0.15
+            let offsetY = Foundation.sin(angle) * r * 0.15
+            let nebulaCenter = CGPoint(x: center.x + offsetX, y: center.y + offsetY)
+            
+            // ガウス分布的な透明度
+            let alpha = exp(-t * t * 1.5) * 0.3
+            
+            let gradient = Gradient(stops: [
+                .init(color: color.opacity(alpha * 1.2), location: 0.0),
+                .init(color: color.opacity(alpha * 0.6), location: 0.4),
+                .init(color: color.opacity(alpha * 0.2), location: 0.7),
+                .init(color: color.opacity(0), location: 1.0)
+            ])
+            
+            context.fill(
+                Path(ellipseIn: CGRect(x: nebulaCenter.x - r, y: nebulaCenter.y - r, width: r * 2, height: r * 2)),
+                with: .radialGradient(gradient, center: nebulaCenter, startRadius: 0, endRadius: r)
+            )
+        }
+        
+        // 中心の明るいコア
+        let coreRadius = adjustedRadius * 0.25
+        let corePulse = Foundation.sin(phase * 1.5) * 0.15 + 0.85
+        context.fill(
+            Path(ellipseIn: CGRect(x: center.x - coreRadius, y: center.y - coreRadius, width: coreRadius * 2, height: coreRadius * 2)),
+            with: .radialGradient(
+                Gradient(colors: [.white.opacity(0.6 * corePulse), color.opacity(0.8), color.opacity(0.2), .clear]),
+                center: center,
+                startRadius: 0,
+                endRadius: coreRadius
+            )
+        )
+    }
+    
+    private func drawTendril(
+        context: inout GraphicsContext,
+        center: CGPoint,
+        radius: CGFloat,
+        color: Color,
+        rotation: Angle,
+        phase: Double
+    ) {
+        // 触手・蔓のような有機的な曲線
+        let segments = 48
+        let length = radius * 5.0
+        
+        var points: [CGPoint] = []
+        
+        for i in 0...segments {
+            let t = Double(i) / Double(segments)
+            let angle = rotation.radians + t * Double.pi * 1.5
+            
+            // より複雑な多重波形
+            let wave1 = Foundation.sin(phase * 0.5 + t * Double.pi * 5) * radius * 0.5
+            let wave2 = Foundation.cos(phase * 0.4 + t * Double.pi * 3.5) * radius * 0.3
+            let wave3 = Foundation.sin(phase * 0.6 + t * Double.pi * 7) * radius * 0.2
+            let wave4 = Foundation.cos(phase * 0.35 + t * Double.pi * 4.5) * radius * 0.15
+            
+            let perpAngle = angle + Double.pi / 2
+            let offset = wave1 + wave2 + wave3 + wave4
+            
+            // より自然な細まり
+            let taper = Foundation.sin(t * Double.pi) * (1.0 - t * 0.3)
+            
+            let x = center.x + Foundation.cos(angle) * length * (t - 0.5) + Foundation.cos(perpAngle) * offset
+            let y = center.y + Foundation.sin(angle) * length * (t - 0.5) + Foundation.sin(perpAngle) * offset
+            
+            points.append(CGPoint(x: x, y: y))
+        }
+        
+        guard points.count >= 2 else { return }
+        
+        // 多層のグローエフェクト
+        for layer in (0..<6).reversed() {
+            let t = Double(layer) / 5.0
+            let falloff = exp(-t * t * 2.0)
+            let alpha = 0.08 * falloff
+            let width = radius * (0.3 + t * 0.5)
+            
+            var path = Path()
+            path.move(to: points[0])
+            
+            for i in 1..<points.count - 1 {
+                let p1 = points[i]
+                let p2 = points[i + 1]
+                let midX = (p1.x + p2.x) / 2
+                let midY = (p1.y + p2.y) / 2
+                path.addQuadCurve(to: CGPoint(x: midX, y: midY), control: p1)
+            }
+            
+            if let last = points.last {
+                path.addLine(to: last)
+            }
+            
+            context.stroke(
+                path,
+                with: .color(color.opacity(alpha)),
+                style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
+            )
+        }
+        
+        // 発光する中心線
+        var corePath = Path()
+        corePath.move(to: points[0])
+        
+        for i in 1..<points.count - 1 {
+            let p1 = points[i]
+            let p2 = points[i + 1]
+            let midX = (p1.x + p2.x) / 2
+            let midY = (p1.y + p2.y) / 2
+            corePath.addQuadCurve(to: CGPoint(x: midX, y: midY), control: p1)
+        }
+        if let last = points.last {
+            corePath.addLine(to: last)
+        }
+        
+        context.stroke(
+            corePath,
+            with: .linearGradient(
+                Gradient(colors: [color.opacity(0.4), .white.opacity(0.9), .white.opacity(0.95), .white.opacity(0.9), color.opacity(0.4)]),
+                startPoint: points.first ?? center,
+                endPoint: points.last ?? center
+            ),
+            style: StrokeStyle(lineWidth: radius * 0.04, lineCap: .round)
+        )
+    }
+    
+    private func drawDroplet(
+        context: inout GraphicsContext,
+        center: CGPoint,
+        radius: CGFloat,
+        color: Color,
+        rotation: Angle,
+        phase: Double
+    ) {
+        // 水滴・しずく形
+        let breathe = 1.0 + Foundation.sin(phase * 0.7) * 0.1
+        let adjustedRadius = radius * breathe
+        
+        var path = Path()
+        
+        // しずく形のパスを作成
+        let topPoint = CGPoint(x: center.x, y: center.y - adjustedRadius * 1.3)
+        let bottomPoint = CGPoint(x: center.x, y: center.y + adjustedRadius * 0.7)
+        
+        path.move(to: topPoint)
+        
+        // 右側の曲線
+        path.addQuadCurve(
+            to: bottomPoint,
+            control: CGPoint(x: center.x + adjustedRadius * 0.8, y: center.y)
+        )
+        
+        // 左側の曲線
+        path.addQuadCurve(
+            to: topPoint,
+            control: CGPoint(x: center.x - adjustedRadius * 0.8, y: center.y)
+        )
+        
+        // 回転を適用
+        context.drawLayer { ctx in
+            ctx.translateBy(x: center.x, y: center.y)
+            ctx.rotate(by: rotation + Angle(radians: phase * 0.3))
+            ctx.translateBy(x: -center.x, y: -center.y)
+            
+            // 外側のグロー
+            for i in (0..<5).reversed() {
+                let t = Double(i) / 4.0
+                let glowRadius = adjustedRadius * (1.0 + t * 0.8)
+                let alpha = exp(-t * t * 1.5) * 0.25
+                
+                ctx.fill(
+                    path,
+                    with: .color(color.opacity(alpha))
+                )
+            }
+            
+            // 本体
+            ctx.fill(
+                path,
+                with: .radialGradient(
+                    Gradient(stops: [
+                        .init(color: .white.opacity(0.8), location: 0.0),
+                        .init(color: color.opacity(0.9), location: 0.4),
+                        .init(color: color.opacity(0.6), location: 0.8),
+                        .init(color: color.opacity(0.3), location: 1.0)
+                    ]),
+                    center: center,
+                    startRadius: 0,
+                    endRadius: adjustedRadius
+                )
+            )
+            
+            // ハイライト
+            let highlightCenter = CGPoint(x: center.x - adjustedRadius * 0.2, y: center.y - adjustedRadius * 0.5)
+            let highlightRadius = adjustedRadius * 0.3
+            
+            ctx.fill(
+                Path(ellipseIn: CGRect(
+                    x: highlightCenter.x - highlightRadius,
+                    y: highlightCenter.y - highlightRadius,
+                    width: highlightRadius * 2,
+                    height: highlightRadius * 2
+                )),
+                with: .radialGradient(
+                    Gradient(colors: [.white.opacity(0.7), .white.opacity(0.3), .clear]),
+                    center: highlightCenter,
+                    startRadius: 0,
+                    endRadius: highlightRadius
+                )
+            )
+        }
+    }
+    
+    private func drawPetal(
+        context: inout GraphicsContext,
+        center: CGPoint,
+        radius: CGFloat,
+        color: Color,
+        rotation: Angle,
+        phase: Double
+    ) {
+        // 花びら形
+        let breathe = 1.0 + Foundation.sin(phase * 0.6) * 0.12
+        let adjustedRadius = radius * breathe
+        
+        var path = Path()
+        
+        // 花びら形のパスを作成
+        let tipPoint = CGPoint(x: center.x, y: center.y - adjustedRadius * 1.5)
+        let baseLeftPoint = CGPoint(x: center.x - adjustedRadius * 0.5, y: center.y + adjustedRadius * 0.3)
+        let baseRightPoint = CGPoint(x: center.x + adjustedRadius * 0.5, y: center.y + adjustedRadius * 0.3)
+        
+        path.move(to: baseLeftPoint)
+        
+        // 左側の曲線
+        path.addQuadCurve(
+            to: tipPoint,
+            control: CGPoint(x: center.x - adjustedRadius * 0.9, y: center.y - adjustedRadius * 0.5)
+        )
+        
+        // 右側の曲線
+        path.addQuadCurve(
+            to: baseRightPoint,
+            control: CGPoint(x: center.x + adjustedRadius * 0.9, y: center.y - adjustedRadius * 0.5)
+        )
+        
+        // 底辺
+        path.addQuadCurve(
+            to: baseLeftPoint,
+            control: CGPoint(x: center.x, y: center.y + adjustedRadius * 0.4)
+        )
+        
+        // 回転を適用
+        context.drawLayer { ctx in
+            ctx.translateBy(x: center.x, y: center.y)
+            ctx.rotate(by: rotation + Angle(radians: phase * 0.25))
+            ctx.translateBy(x: -center.x, y: -center.y)
+            
+            // 外側のグロー
+            for i in (0..<6).reversed() {
+                let t = Double(i) / 5.0
+                let alpha = exp(-t * t * 1.5) * 0.2
+                
+                var glowPath = path
+                
+                ctx.fill(
+                    glowPath,
+                    with: .color(color.opacity(alpha))
+                )
+            }
+            
+            // 本体のグラデーション
+            ctx.fill(
+                path,
+                with: .linearGradient(
+                    Gradient(stops: [
+                        .init(color: .white.opacity(0.3), location: 0.0),
+                        .init(color: color.opacity(0.85), location: 0.3),
+                        .init(color: color.opacity(0.6), location: 0.7),
+                        .init(color: color.opacity(0.3), location: 1.0)
+                    ]),
+                    startPoint: tipPoint,
+                    endPoint: CGPoint(x: center.x, y: center.y + adjustedRadius * 0.3)
+                )
+            )
+            
+            // 中心の脈
+            var veinPath = Path()
+            veinPath.move(to: CGPoint(x: center.x, y: center.y + adjustedRadius * 0.3))
+            veinPath.addLine(to: CGPoint(x: center.x, y: center.y - adjustedRadius * 1.2))
+            
+            ctx.stroke(
+                veinPath,
+                with: .linearGradient(
+                    Gradient(colors: [color.opacity(0.2), .white.opacity(0.6), .white.opacity(0.4)]),
+                    startPoint: CGPoint(x: center.x, y: center.y + adjustedRadius * 0.3),
+                    endPoint: CGPoint(x: center.x, y: center.y - adjustedRadius * 1.2)
+                ),
+                style: StrokeStyle(lineWidth: adjustedRadius * 0.03, lineCap: .round)
+            )
+        }
     }
     
     private func drawAmbientParticles(context: GraphicsContext, size: CGSize, phase: Double, layer: Int) {

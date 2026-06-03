@@ -3,8 +3,10 @@ import SwiftUI
 struct ContentView: View {
     @State private var viewModel = KaleidoscopeViewModel()
     @State private var motionManager = MotionManager()
+    @State private var audioManager = AudioManager.shared
     @State private var isDragging = false
     @State private var showUI = true
+    @State private var isMusicPlaying = false
     
     var body: some View {
         GeometryReader { geometry in
@@ -50,6 +52,29 @@ struct ContentView: View {
                 
                 VStack {
                     HStack {
+                        // BGMボタン（左上）
+                        Button(action: {
+                            isMusicPlaying.toggle()
+                            if isMusicPlaying {
+                                audioManager.play()
+                            } else {
+                                audioManager.stop()
+                            }
+                        }) {
+                            Image(systemName: isMusicPlaying ? "music.note" : "music.note.slash")
+                                .font(.system(size: 24, weight: .medium))
+                                .foregroundStyle(.white)
+                                .frame(width: 50, height: 50)
+                                .background(
+                                    Circle()
+                                        .fill(isMusicPlaying ? Color.white.opacity(0.25) : Color.white.opacity(0.15))
+                                        .shadow(color: .black.opacity(0.3), radius: 8)
+                                )
+                        }
+                        .opacity(showUI ? 1 : 0)
+                        .animation(.easeInOut(duration: 0.3), value: showUI)
+                        .padding()
+                        
                         Spacer()
                         
                         PaletteSelectorView(
