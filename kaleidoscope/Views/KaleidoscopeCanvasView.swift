@@ -27,47 +27,13 @@ struct KaleidoscopeCanvasView: View {
         let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
         let maxDimension = max(canvasSize.width, canvasSize.height)
         
-        // Layer 1: Deep cosmic background with nebula
+        // シンプルで美しい構成 - 不要なエフェクトを全て削除
+        
+        // Layer 1: 深い背景のみ
         drawDeepBackground(context: context, size: canvasSize, center: center, phase: phase)
-        drawNebulaCloud(context: context, size: canvasSize, phase: phase)
         
-        // Layer 2: Distant stardust field
-        drawStardustField(context: context, size: canvasSize, phase: phase, density: 80, depth: 0.2)
-        drawAmbientParticles(context: context, size: canvasSize, phase: phase, layer: 0)
-        
-        // Layer 3: Outermost kaleidoscope - ethereal haze
-        let outerRadius = maxDimension * 0.95
-        drawKaleidoscopeLayer(
-            context: context,
-            center: center,
-            radius: outerRadius,
-            phase: phase - 0.5,
-            symmetryCount: max(3, state.symmetryCount - 3),
-            rotation: state.globalRotation * 0.3,
-            elements: Array(state.seedElements.suffix(15)),
-            animationPhase: state.animationPhase * 0.5,
-            opacity: 0.2
-        )
-        
-        // Layer 4: Outer kaleidoscope
-        let outer2Radius = maxDimension * 0.85
-        drawKaleidoscopeLayer(
-            context: context,
-            center: center,
-            radius: outer2Radius,
-            phase: phase - 0.3,
-            symmetryCount: max(3, state.symmetryCount - 2),
-            rotation: state.globalRotation * 0.5,
-            elements: Array(state.seedElements.suffix(20)),
-            animationPhase: state.animationPhase * 0.7,
-            opacity: 0.35
-        )
-        
-        // Layer 5: Mid-outer stardust
-        drawStardustField(context: context, size: canvasSize, phase: phase + 0.5, density: 60, depth: 0.4)
-        
-        // Layer 6: Main kaleidoscope - full complexity
-        let mainRadius = maxDimension * 0.65
+        // Layer 2: メインカレイドスコープ - 全ての粒子
+        let mainRadius = maxDimension * 0.7
         drawKaleidoscopeLayer(
             context: context,
             center: center,
@@ -80,94 +46,33 @@ struct KaleidoscopeCanvasView: View {
             opacity: 1.0
         )
         
-        // Layer 7: Micro-detail shimmer particles
-        drawMicroShimmer(context: context, size: canvasSize, center: center, phase: phase)
-        
-        // Layer 8: Tap ripples removed - now using localized distortion effect
-        
-        drawAmbientParticles(context: context, size: canvasSize, phase: phase, layer: 1)
-        
-        // Layer 9: Inner detail kaleidoscope
-        let innerRadius = maxDimension * 0.42
+        // Layer 3: インナーレイヤー（異なる対称性）
+        let innerRadius = maxDimension * 0.45
         drawKaleidoscopeLayer(
             context: context,
             center: center,
             radius: innerRadius,
-            phase: phase + 0.3,
+            phase: phase + 0.4,
             symmetryCount: state.symmetryCount + 2,
-            rotation: -state.globalRotation * 1.2,
-            elements: Array(state.seedElements.prefix(25)),
-            animationPhase: state.animationPhase * 1.1,
-            opacity: 0.8
+            rotation: -state.globalRotation * 1.3,
+            elements: Array(state.seedElements.prefix(state.seedElements.count / 2)),
+            animationPhase: state.animationPhase * 1.2,
+            opacity: 0.85
         )
         
-        // Layer 10: Light diffraction halo
-        drawLightDiffraction(context: context, center: center, radius: maxDimension * 0.35, phase: phase)
-        
-        // Layer 11: Deep inner kaleidoscope
-        let deepInnerRadius = maxDimension * 0.32
-        drawKaleidoscopeLayer(
-            context: context,
-            center: center,
-            radius: deepInnerRadius,
-            phase: phase + 0.5,
-            symmetryCount: state.symmetryCount + 3,
-            rotation: -state.globalRotation * 1.5,
-            elements: Array(state.seedElements.prefix(18)),
-            animationPhase: state.animationPhase * 1.3,
-            opacity: 0.7
-        )
-        
-        // Layer 12: Core kaleidoscope
-        let coreRadius = maxDimension * 0.2
+        // Layer 4: コアレイヤー（さらに異なる対称性）
+        let coreRadius = maxDimension * 0.25
         drawKaleidoscopeLayer(
             context: context,
             center: center,
             radius: coreRadius,
             phase: phase + 0.8,
-            symmetryCount: state.symmetryCount + 5,
-            rotation: state.globalRotation * 2.0,
-            elements: Array(state.seedElements.prefix(12)),
-            animationPhase: state.animationPhase * 1.6,
-            opacity: 0.6
+            symmetryCount: state.symmetryCount + 4,
+            rotation: state.globalRotation * 1.8,
+            elements: Array(state.seedElements.prefix(state.seedElements.count / 3)),
+            animationPhase: state.animationPhase * 1.5,
+            opacity: 0.7
         )
-        
-        // Layer 13: Innermost nucleus
-        let nucleusRadius = maxDimension * 0.1
-        drawKaleidoscopeLayer(
-            context: context,
-            center: center,
-            radius: nucleusRadius,
-            phase: phase + 1.2,
-            symmetryCount: state.symmetryCount + 8,
-            rotation: state.globalRotation * 3.0,
-            elements: Array(state.seedElements.prefix(8)),
-            animationPhase: state.animationPhase * 2.0,
-            opacity: 0.45
-        )
-        
-        drawAmbientParticles(context: context, size: canvasSize, phase: phase, layer: 2)
-        
-        // Layer 14: Chromatic aberration overlay
-        drawChromaticAberration(context: context, center: center, radius: maxDimension * 0.4, phase: phase)
-        
-        // Layer 15: Central luminous glow
-        drawCentralGlow(context: context, center: center, radius: maxDimension * 0.12, phase: phase)
-        
-        // Layer 16: Floating particles and dust
-        drawFloatingMotes(context: context, size: canvasSize, phase: phase)
-        drawMicroDust(context: context, size: canvasSize, phase: phase)
-        
-        // Layer 17: Energy auras from interaction
-        drawEnergyAuras(context: context, size: canvasSize, phase: phase)
-        
-        // Layer 18: Final sparkle overlay
-        drawSparkleOverlay(context: context, size: canvasSize, phase: phase)
-        
-        // Layer 19: Shake energy effect
-        if state.shakeEnergy > 0.05 {
-            drawShakeEffect(context: context, size: canvasSize, center: center, phase: phase)
-        }
     }
     
     private func drawTapRipples(context: GraphicsContext, size: CGSize, phase: Double) {
@@ -412,18 +317,26 @@ struct KaleidoscopeCanvasView: View {
         let size = baseSize * breathe * energyScale
         
         switch element.type {
-        case .circle:
+        case .circle, .star:
             drawLuminousOrb(context: &context, center: pos, radius: size, color: element.color, phase: elementPhase)
+        case .dot:
+            drawSimpleDot(context: &context, center: pos, radius: size, color: element.color)
         case .nebula:
             drawNebula(context: &context, center: pos, radius: size, color: element.color, phase: elementPhase)
-        case .curve:
+        case .curve, .wave, .arc:
             drawEtherealThread(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
-        case .tendril:
+        case .tendril, .spiral:
             drawTendril(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
-        case .droplet:
+        case .droplet, .crescent:
             drawDroplet(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
-        case .petal:
+        case .petal, .diamond:
             drawPetal(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
+        case .zigzag, .dash:
+            drawZigzag(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
+        case .ring, .ellipse:
+            drawRing(context: &context, center: pos, radius: size, color: element.color, phase: elementPhase)
+        case .triangle, .square, .hexagon, .cross:
+            drawGeometric(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, type: element.type)
         }
     }
     
@@ -1618,6 +1531,79 @@ struct KaleidoscopeCanvasView: View {
             Path(ellipseIn: CGRect(x: center.x - burstRadius, y: center.y - burstRadius, width: burstRadius * 2, height: burstRadius * 2)),
             with: .radialGradient(burstGradient, center: center, startRadius: 0, endRadius: burstRadius)
         )
+    }
+    
+    // === 新しいパターンの描画関数 ===
+    
+    private func drawSimpleDot(context: inout GraphicsContext, center: CGPoint, radius: CGFloat, color: Color) {
+        context.fill(
+            Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)),
+            with: .color(color)
+        )
+    }
+    
+    private func drawZigzag(context: inout GraphicsContext, center: CGPoint, radius: CGFloat, color: Color, rotation: Angle, phase: Double) {
+        let length = radius * 3
+        var path = Path()
+        let segments = 6
+        path.move(to: center)
+        
+        for i in 0...segments {
+            let t = Double(i) / Double(segments)
+            let angle = rotation.radians + t * Double.pi * 0.5
+            let zigzag = (i % 2 == 0) ? radius * 0.5 : -radius * 0.5
+            let perpAngle = angle + Double.pi / 2
+            let x = center.x + Foundation.cos(angle) * length * t + Foundation.cos(perpAngle) * zigzag
+            let y = center.y + Foundation.sin(angle) * length * t + Foundation.sin(perpAngle) * zigzag
+            path.addLine(to: CGPoint(x: x, y: y))
+        }
+        
+        context.stroke(path, with: .color(color.opacity(0.6)), style: StrokeStyle(lineWidth: radius * 0.15, lineCap: .round, lineJoin: .round))
+    }
+    
+    private func drawRing(context: inout GraphicsContext, center: CGPoint, radius: CGFloat, color: Color, phase: Double) {
+        let breathe = 1.0 + Foundation.sin(phase * 1.2) * 0.1
+        let r = radius * breathe
+        
+        context.stroke(
+            Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)),
+            with: .color(color.opacity(0.5)),
+            style: StrokeStyle(lineWidth: radius * 0.12, lineCap: .round)
+        )
+    }
+    
+    private func drawGeometric(context: inout GraphicsContext, center: CGPoint, radius: CGFloat, color: Color, rotation: Angle, type: ElementType) {
+        var path = Path()
+        let vertices: Int
+        
+        switch type {
+        case .triangle: vertices = 3
+        case .square: vertices = 4
+        case .hexagon: vertices = 6
+        case .cross:
+            // 十字の描画
+            let lineLength = radius * 1.5
+            path.move(to: CGPoint(x: center.x - lineLength, y: center.y))
+            path.addLine(to: CGPoint(x: center.x + lineLength, y: center.y))
+            path.move(to: CGPoint(x: center.x, y: center.y - lineLength))
+            path.addLine(to: CGPoint(x: center.x, y: center.y + lineLength))
+            context.stroke(path, with: .color(color.opacity(0.6)), style: StrokeStyle(lineWidth: radius * 0.12, lineCap: .round))
+            return
+        default: vertices = 3
+        }
+        
+        for i in 0...vertices {
+            let angle = rotation.radians + Double(i) * (Double.pi * 2.0 / Double(vertices))
+            let x = center.x + Foundation.cos(angle) * radius
+            let y = center.y + Foundation.sin(angle) * radius
+            if i == 0 {
+                path.move(to: CGPoint(x: x, y: y))
+            } else {
+                path.addLine(to: CGPoint(x: x, y: y))
+            }
+        }
+        
+        context.stroke(path, with: .color(color.opacity(0.5)), style: StrokeStyle(lineWidth: radius * 0.10, lineCap: .round, lineJoin: .round))
     }
 }
 

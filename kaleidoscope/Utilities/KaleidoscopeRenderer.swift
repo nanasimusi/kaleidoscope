@@ -40,7 +40,8 @@ enum KaleidoscopeRenderer {
         let elementRadius = element.size * sectorRadius
         
         switch element.type {
-        case .circle:
+        case .circle, .dot:
+            // 円形・点
             drawSoftOrb(
                 context: &context,
                 center: elementCenter,
@@ -59,7 +60,8 @@ enum KaleidoscopeRenderer {
                 animationPhase: animationPhase + element.rotation.radians
             )
             
-        case .curve:
+        case .curve, .wave, .spiral, .arc:
+            // 曲線系
             drawFlowingRibbon(
                 context: &context,
                 center: elementCenter,
@@ -69,8 +71,8 @@ enum KaleidoscopeRenderer {
                 animationPhase: animationPhase
             )
             
-        case .tendril:
-            // 触手系はより長く複雑に
+        case .tendril, .zigzag, .dash:
+            // 触手系・ジグザグ・ダッシュはより長く複雑に
             drawFlowingRibbon(
                 context: &context,
                 center: elementCenter,
@@ -80,8 +82,40 @@ enum KaleidoscopeRenderer {
                 animationPhase: animationPhase
             )
             
-        case .droplet, .petal:
-            // 水滴・花びら系は柔らかく
+        case .droplet, .petal, .ellipse:
+            // 水滴・花びら・楕円系は柔らかく
+            drawCrystalFacet(
+                context: &context,
+                center: elementCenter,
+                radius: elementRadius,
+                color: element.color,
+                rotation: element.rotation,
+                animationPhase: animationPhase
+            )
+            
+        case .ring:
+            // リングは中空の円
+            drawSoftOrb(
+                context: &context,
+                center: elementCenter,
+                radius: elementRadius,
+                color: element.color,
+                animationPhase: animationPhase + element.rotation.radians
+            )
+            
+        case .star, .crescent:
+            // 星・三日月は結晶系の描画
+            drawCrystalFacet(
+                context: &context,
+                center: elementCenter,
+                radius: elementRadius,
+                color: element.color,
+                rotation: element.rotation,
+                animationPhase: animationPhase
+            )
+            
+        case .diamond, .triangle, .square, .hexagon, .cross:
+            // 幾何学形状は結晶系の描画
             drawCrystalFacet(
                 context: &context,
                 center: elementCenter,

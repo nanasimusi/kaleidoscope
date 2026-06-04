@@ -8,6 +8,23 @@ enum ElementType: CaseIterable {
     case tendril     // 触手・蔓のような有機的な形
     case droplet     // 水滴・しずく形
     case petal       // 花びら形
+    
+    // 新しいパターンを大量追加（バリエーション豊富に）
+    case spiral      // 螺旋
+    case wave        // 波形
+    case zigzag      // ジグザグ
+    case ring        // リング
+    case star        // 星形（小さな点）
+    case crescent    // 三日月
+    case diamond     // ダイヤモンド形
+    case triangle    // 三角形
+    case square      // 四角形
+    case cross       // 十字
+    case arc         // 弧
+    case dot         // 微小な点
+    case dash        // ダッシュ（短線）
+    case ellipse     // 楕円
+    case hexagon     // 六角形
 }
 
 struct SeedElement: Identifiable {
@@ -27,20 +44,67 @@ struct SeedElement: Identifiable {
     var targetPosition: CGPoint?
     var morphProgress: Double = 1.0
     
+    // 生き物としての個性と知性
+    var personality: Double  // 0.0-1.0: 内向的 <-> 外向的
+    var curiosity: Double    // 0.0-1.0: 探索への興味
+    var sociability: Double  // 0.0-1.0: 他の粒子への親和性
+    var mood: Double = 0.5   // 0.0-1.0: 静か <-> 活発
+    var awareness: Double = 0.0  // 周囲への気づき
+    
     static func random(colors: [Color], colorIndex: Int, depth: Double) -> SeedElement {
-        // 水墨画の筆致を意識：細い線と小さな点を中心に
+        // 極めて多様なパターン（ユーザーを飽きさせない）
         let types: [ElementType] = [
-            .circle,                                              // 小さな点（墨の飛沫）
-            .curve, .curve, .curve, .curve, .curve, .curve,       // 細い筆線（圧倒的に多く）
-            .tendril, .tendril, .tendril, .tendril,               // 繊細な蔓線
-            .droplet,                                             // ごく小さな滴
-            .petal                                                // 薄い花びら
+            // 線系（多め）
+            .curve, .curve, .curve, .curve,
+            .tendril, .tendril, .tendril,
+            .wave, .wave,
+            .spiral, .spiral,
+            .arc, .arc,
+            .zigzag,
+            
+            // 点系
+            .circle, .circle,
+            .dot, .dot, .dot,
+            .star,
+            
+            // 形系
+            .droplet,
+            .petal,
+            .crescent,
+            .diamond,
+            .triangle,
+            .square,
+            .cross,
+            .ellipse,
+            .hexagon,
+            .ring,
+            .dash,
+            .nebula
         ]
         
-        // 全体的にサイズを小さく、余白を生かす
-        let sizeVariation = depth < 0.3 ? CGFloat.random(in: 0.002...0.012) :
-                           depth < 0.7 ? CGFloat.random(in: 0.004...0.020) :
-                                        CGFloat.random(in: 0.006...0.030)
+        // 多様なサイズバリエーション（飽きさせない）
+        let sizeCategory = Int.random(in: 0...4)
+        let sizeVariation: CGFloat
+        switch sizeCategory {
+        case 0: sizeVariation = CGFloat.random(in: 0.0008...0.003)  // 極小
+        case 1: sizeVariation = CGFloat.random(in: 0.002...0.008)   // 小
+        case 2: sizeVariation = CGFloat.random(in: 0.005...0.015)   // 中
+        case 3: sizeVariation = CGFloat.random(in: 0.010...0.025)   // 大
+        default: sizeVariation = CGFloat.random(in: 0.015...0.040)  // 極大
+        }
+        
+        // 各粒子に個性を付与（生き物のように）
+        let personality = Double.random(in: 0...1)
+        let curiosity = Double.random(in: 0...1)
+        let sociability = Double.random(in: 0...1)
+        
+        // 個性に基づいた初期速度（内向的な粒子はゆっくり）
+        let speedFactor = 0.5 + personality * 0.5
+        
+        // 色のバリエーション（基本色から少しずらす）
+        let baseColor = colors[colorIndex % colors.count]
+        let colorVariation = Double.random(in: -0.15...0.15)  // 色相を少し変化
+        let brightnessVariation = Double.random(in: 0.7...1.3)  // 明るさを変化
         
         return SeedElement(
             position: CGPoint(
@@ -48,18 +112,22 @@ struct SeedElement: Identifiable {
                 y: CGFloat.random(in: 0.02...0.98)
             ),
             size: sizeVariation,
-            color: colors[colorIndex % colors.count],
+            color: baseColor.opacity(Double.random(in: 0.6...1.0)),  // 透明度も変化
             rotation: Angle(degrees: Double.random(in: 0...360)),
             type: types.randomElement()!,
             velocity: CGPoint(
-                x: CGFloat.random(in: -0.0015...0.0015),
-                y: CGFloat.random(in: -0.0015...0.0015)
+                x: CGFloat.random(in: -0.002...0.002) * speedFactor,
+                y: CGFloat.random(in: -0.002...0.002) * speedFactor
             ),
-            rotationSpeed: Double.random(in: -2.5...2.5),
-            sizeOscillation: Double.random(in: 0.1...0.35),
+            rotationSpeed: Double.random(in: -3.5...3.5) * speedFactor,
+            sizeOscillation: Double.random(in: 0.15...0.45),
             phaseOffset: Double.random(in: 0...Double.pi * 2),
             colorIndex: colorIndex,
-            depth: depth
+            depth: depth,
+            personality: personality,
+            curiosity: curiosity,
+            sociability: sociability,
+            mood: 0.3 + Double.random(in: 0...0.4)
         )
     }
 }
@@ -114,8 +182,8 @@ final class KaleidoscopeState {
     }
     
     func randomize(with colors: [Color]) {
-        // 水墨画のように少ない要素で余白を生かす
-        let elementCount = Int.random(in: 30...50)
+        // 無数の粒子が生き物のように動く
+        let elementCount = Int.random(in: 120...180)
         seedElements = (0..<elementCount).map { index in
             let depth = Double(index) / Double(elementCount)
             return SeedElement.random(colors: colors, colorIndex: index, depth: depth)
@@ -278,6 +346,56 @@ final class KaleidoscopeState {
             flowX += smoothTilt.x * tiltStrength * energyBoost
             flowY += smoothTilt.y * tiltStrength * energyBoost
             
+            // === 生き物としての知性と感情に基づく動き ===
+            
+            // 気分の変化（ランダムウォーク）
+            element.mood += (Double.random(in: -0.02...0.02) * element.personality)
+            element.mood = max(0.0, min(1.0, element.mood))
+            
+            // 周囲の粒子を感知（sociabilityが高いほど広範囲）
+            var nearbyCount = 0
+            var attractionX: Double = 0
+            var attractionY: Double = 0
+            let awarenessRadius = 0.15 * element.sociability
+            
+            for j in seedElements.indices where j != i {
+                let other = seedElements[j]
+                let dx = other.position.x - element.position.x
+                let dy = other.position.y - element.position.y
+                let distance = sqrt(dx * dx + dy * dy)
+                
+                if distance < awarenessRadius && distance > 0.001 {
+                    nearbyCount += 1
+                    
+                    // 社交的な粒子は他の粒子に惹かれる
+                    let attraction = element.sociability * 0.0008 / distance
+                    attractionX += dx * attraction
+                    attractionY += dy * attraction
+                    
+                    // 好奇心の強い粒子はランダムに探索
+                    if element.curiosity > 0.7 {
+                        let randomExplore = element.curiosity * 0.0002
+                        attractionX += Foundation.cos(phase * 3.0 + element.phaseOffset) * randomExplore
+                        attractionY += Foundation.sin(phase * 3.0 + element.phaseOffset) * randomExplore
+                    }
+                }
+            }
+            
+            element.awareness = Double(nearbyCount) / 10.0
+            
+            // 個性に基づく速度調整
+            let personalityFactor = 0.7 + element.personality * 0.6
+            let moodFactor = 0.5 + element.mood * 0.5
+            
+            flowX += attractionX * personalityFactor * moodFactor
+            flowY += attractionY * personalityFactor * moodFactor
+            
+            // 内向的な粒子は時々立ち止まる
+            if element.personality < 0.3 && Foundation.sin(phase * 2.0 + element.phaseOffset) > 0.9 {
+                flowX *= 0.1
+                flowY *= 0.1
+            }
+            
             // より滑らかで自然な速度減衰（生物の動きのように）
             let velocityDecayRate = 2.2 + (1.0 - effectiveEnergy) * 2.8
             let velocityDecay = exp(-velocityDecayRate * smoothDelta)
@@ -328,16 +446,22 @@ final class KaleidoscopeState {
             let rotationDecay = exp(-1.4 * smoothDelta)
             element.rotationSpeed *= rotationDecay
             
-            // 複数の周波数を組み合わせた自然な回転変動
+            // 複数の周波数を組み合わせた自然な回転変動（個性を反映）
+            let rotationIntensity = 0.5 + element.mood * 0.5 + element.personality * 0.3
             var baseRotation = (Foundation.sin(phase * 0.28 + element.phaseOffset) * 0.42 +
                                Foundation.cos(phase * 0.17 + element.phaseOffset * 1.3) * 0.28 +
-                               Foundation.sin(phase * 0.35 + element.phaseOffset * 0.7) * 0.18)
+                               Foundation.sin(phase * 0.35 + element.phaseOffset * 0.7) * 0.18) * rotationIntensity
             
-            // 傾きによる回転への影響（左右の傾きで回転速度が変化）- より強く
+            // 好奇心の強い粒子はより活発に回転
+            if element.curiosity > 0.6 {
+                baseRotation += Foundation.sin(phase * 1.5 + element.phaseOffset) * 0.15 * element.curiosity
+            }
+            
+            // 傾きによる回転への影響（左右の傾きで回転速度が変化）
             let tiltRotationInfluence = smoothTilt.x * 0.35 * (1.0 - element.depth * 0.25)
             baseRotation += tiltRotationInfluence
             
-            element.rotation += Angle(degrees: (element.rotationSpeed + baseRotation) * smoothDelta * 45)
+            element.rotation += Angle(degrees: (element.rotationSpeed + baseRotation) * smoothDelta * 45 * rotationIntensity)
             
             seedElements[i] = element
         }
