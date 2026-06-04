@@ -183,7 +183,7 @@ final class KaleidoscopeState {
     
     func randomize(with colors: [Color]) {
         // 無数の粒子が生き物のように動く
-        let elementCount = Int.random(in: 120...180)
+        let elementCount = Int.random(in: 40...60)
         seedElements = (0..<elementCount).map { index in
             let depth = Double(index) / Double(elementCount)
             return SeedElement.random(colors: colors, colorIndex: index, depth: depth)
