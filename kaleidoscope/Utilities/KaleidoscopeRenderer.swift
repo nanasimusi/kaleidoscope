@@ -60,8 +60,8 @@ enum KaleidoscopeRenderer {
                 animationPhase: animationPhase + element.rotation.radians
             )
             
-        case .curve, .wave, .spiral, .arc:
-            // 曲線系
+        case .curve, .wave, .spiral, .arc, .wavyLine, .coil, .helix, .snake:
+            // 曲線系 - 滑らかな流れ
             drawFlowingRibbon(
                 context: &context,
                 center: elementCenter,
@@ -71,12 +71,23 @@ enum KaleidoscopeRenderer {
                 animationPhase: animationPhase
             )
             
-        case .tendril, .zigzag, .dash:
-            // 触手系・ジグザグ・ダッシュはより長く複雑に
+        case .tendril, .zigzag, .dash, .vine, .thread, .fiber, .whip, .lasso, .rope:
+            // 触手・蔓系 - より長く複雑に
             drawFlowingRibbon(
                 context: &context,
                 center: elementCenter,
                 radius: elementRadius * 1.2,
+                color: element.color,
+                rotation: element.rotation,
+                animationPhase: animationPhase
+            )
+            
+        case .doubleLine, .tripleLine, .brokenLine, .lightning, .ribbon, .streak, .beam, .trail, .braid, .chain:
+            // 多重線・特殊線形 - 細く長く
+            drawFlowingRibbon(
+                context: &context,
+                center: elementCenter,
+                radius: elementRadius * 1.4,
                 color: element.color,
                 rotation: element.rotation,
                 animationPhase: animationPhase

@@ -9,10 +9,36 @@ enum ElementType: CaseIterable {
     case droplet     // 水滴・しずく形
     case petal       // 花びら形
     
-    // 新しいパターンを大量追加（バリエーション豊富に）
+    // 線形パターン（大幅に増加）
     case spiral      // 螺旋
     case wave        // 波形
     case zigzag      // ジグザグ
+    case dash        // ダッシュ（短線）
+    case arc         // 弧
+    
+    // 新しい線形パターンを追加
+    case doubleLine  // 二重線
+    case tripleLine  // 三重線
+    case brokenLine  // 破線
+    case wavyLine    // 波線
+    case coil        // コイル・バネ
+    case lightning   // 稲妻・雷
+    case vine        // 蔓・つる
+    case ribbon      // リボン
+    case thread      // 糸
+    case fiber       // 繊維
+    case streak      // 筋・ストリーク
+    case beam        // ビーム・光線
+    case trail       // 軌跡
+    case whip        // 鞭・ムチ
+    case lasso       // 投げ縄
+    case snake       // 蛇行線
+    case helix       // 二重螺旋
+    case braid       // 編み込み
+    case chain       // 鎖
+    case rope        // ロープ
+    
+    // 点・形系（少なめ）
     case ring        // リング
     case star        // 星形（小さな点）
     case crescent    // 三日月
@@ -20,9 +46,7 @@ enum ElementType: CaseIterable {
     case triangle    // 三角形
     case square      // 四角形
     case cross       // 十字
-    case arc         // 弧
     case dot         // 微小な点
-    case dash        // ダッシュ（短線）
     case ellipse     // 楕円
     case hexagon     // 六角形
 }
@@ -52,22 +76,45 @@ struct SeedElement: Identifiable {
     var awareness: Double = 0.0  // 周囲への気づき
     
     static func random(colors: [Color], colorIndex: Int, depth: Double) -> SeedElement {
-        // 極めて多様なパターン（ユーザーを飽きさせない）
+        // 線形パターンを大量に - 流れるような芸術体験
         let types: [ElementType] = [
-            // 線系（多め）
-            .curve, .curve, .curve, .curve,
-            .tendril, .tendril, .tendril,
-            .wave, .wave,
-            .spiral, .spiral,
-            .arc, .arc,
-            .zigzag,
+            // 基本線形（多め）
+            .curve, .curve, .curve, .curve, .curve,
+            .tendril, .tendril, .tendril, .tendril,
+            .wave, .wave, .wave,
+            .spiral, .spiral, .spiral,
+            .arc, .arc, .arc,
+            .zigzag, .zigzag,
+            .dash, .dash,
             
-            // 点系
-            .circle, .circle,
-            .dot, .dot, .dot,
+            // 新しい線形パターン（豊富に）
+            .doubleLine, .doubleLine,
+            .tripleLine, .tripleLine,
+            .brokenLine, .brokenLine,
+            .wavyLine, .wavyLine,
+            .coil, .coil,
+            .lightning, .lightning,
+            .vine, .vine, .vine,
+            .ribbon, .ribbon,
+            .thread, .thread,
+            .fiber, .fiber,
+            .streak, .streak, .streak,
+            .beam, .beam,
+            .trail, .trail,
+            .whip, .whip,
+            .lasso,
+            .snake, .snake,
+            .helix, .helix,
+            .braid,
+            .chain,
+            .rope,
+            
+            // 点系（少なめ）
+            .circle,
+            .dot, .dot,
             .star,
             
-            // 形系
+            // 形系（最小限）
             .droplet,
             .petal,
             .crescent,
@@ -78,7 +125,6 @@ struct SeedElement: Identifiable {
             .ellipse,
             .hexagon,
             .ring,
-            .dash,
             .nebula
         ]
         
@@ -98,13 +144,17 @@ struct SeedElement: Identifiable {
         let curiosity = Double.random(in: 0...1)
         let sociability = Double.random(in: 0...1)
         
-        // 個性に基づいた初期速度（内向的な粒子はゆっくり）
-        let speedFactor = 0.5 + personality * 0.5
+        // 個性に基づいた初期速度 + ランダムな振る舞い
+        let speedFactor = Double.random(in: 0.3...1.5)  // より広い範囲でランダム
+        let isErratic = Bool.random()  // 一部の粒子は不規則な動き
         
         // 色のバリエーション（基本色から少しずらす）
         let baseColor = colors[colorIndex % colors.count]
-        let colorVariation = Double.random(in: -0.15...0.15)  // 色相を少し変化
-        let brightnessVariation = Double.random(in: 0.7...1.3)  // 明るさを変化
+        let colorVariation = Double.random(in: -0.15...0.15)
+        let brightnessVariation = Double.random(in: 0.7...1.3)
+        
+        // 極端な個性を持つ粒子を時々生成（予測不可能性）
+        let isExtreme = Double.random(in: 0...1) > 0.85
         
         return SeedElement(
             position: CGPoint(
@@ -112,22 +162,22 @@ struct SeedElement: Identifiable {
                 y: CGFloat.random(in: 0.02...0.98)
             ),
             size: sizeVariation,
-            color: baseColor.opacity(Double.random(in: 0.6...1.0)),  // 透明度も変化
+            color: baseColor.opacity(Double.random(in: 0.5...1.0)),
             rotation: Angle(degrees: Double.random(in: 0...360)),
             type: types.randomElement()!,
             velocity: CGPoint(
-                x: CGFloat.random(in: -0.002...0.002) * speedFactor,
-                y: CGFloat.random(in: -0.002...0.002) * speedFactor
+                x: CGFloat.random(in: -0.004...0.004) * speedFactor,
+                y: CGFloat.random(in: -0.004...0.004) * speedFactor
             ),
-            rotationSpeed: Double.random(in: -3.5...3.5) * speedFactor,
-            sizeOscillation: Double.random(in: 0.15...0.45),
-            phaseOffset: Double.random(in: 0...Double.pi * 2),
+            rotationSpeed: Double.random(in: -6.0...6.0) * (isErratic ? 2.0 : 1.0),
+            sizeOscillation: Double.random(in: 0.1...0.6),
+            phaseOffset: Double.random(in: 0...Double.pi * 4),  // より広い位相
             colorIndex: colorIndex,
             depth: depth,
-            personality: personality,
-            curiosity: curiosity,
+            personality: isExtreme ? (Bool.random() ? 0.0 : 1.0) : personality,
+            curiosity: isExtreme ? Double.random(in: 0.8...1.0) : curiosity,
             sociability: sociability,
-            mood: 0.3 + Double.random(in: 0...0.4)
+            mood: Double.random(in: 0.2...0.8)
         )
     }
 }
@@ -174,16 +224,21 @@ final class KaleidoscopeState {
     var rotationVelocity: Double = 0.02  // Current rotation speed
     var isResting: Bool = false  // True when fully stopped
     
+    // 自動パレット切り替え
+    var timeSinceLastPaletteChange: Double = 0.0
+    var paletteChangeInterval: Double = Double.random(in: 8...15)  // ランダムな間隔で切り替え
+    
     init() {
-        let initialPalette = ColorPalette.dawn
-        targetPaletteColors = initialPalette.colors
-        currentPaletteColors = initialPalette.colors
-        randomize(with: initialPalette.colors)
+        // ランダムなパレットで開始
+        let randomPalette = ColorPalette.allCases.randomElement()!
+        targetPaletteColors = randomPalette.colors
+        currentPaletteColors = randomPalette.colors
+        randomize(with: randomPalette.colors)
     }
     
     func randomize(with colors: [Color]) {
         // 無数の粒子が生き物のように動く
-        let elementCount = Int.random(in: 40...60)
+        let elementCount = Int.random(in: 30...50)
         seedElements = (0..<elementCount).map { index in
             let depth = Double(index) / Double(elementCount)
             return SeedElement.random(colors: colors, colorIndex: index, depth: depth)
@@ -306,6 +361,20 @@ final class KaleidoscopeState {
         
         tapRipples.removeAll { animationPhase - $0.startTime > 5.0 }
         
+        // 自動パレット切り替え - ランダムな間隔で
+        timeSinceLastPaletteChange += smoothDelta
+        if timeSinceLastPaletteChange >= paletteChangeInterval {
+            // ランダムな新しいパレットに切り替え
+            let allPalettes = ColorPalette.allCases
+            let newPalette = allPalettes.randomElement()!
+            targetPaletteColors = newPalette.colors
+            colorTransitionProgress = 0.0
+            
+            // 次回の切り替え間隔もランダムに
+            paletteChangeInterval = Double.random(in: 8...15)
+            timeSinceLastPaletteChange = 0.0
+        }
+        
         for i in seedElements.indices {
             var element = seedElements[i]
             
@@ -326,16 +395,30 @@ final class KaleidoscopeState {
             let freq3 = 0.06 + element.depth * 0.025 + Foundation.sin(element.phaseOffset * 0.7) * 0.015
             let freq4 = 0.15 + element.depth * 0.055 + Foundation.cos(element.phaseOffset * 1.7) * 0.025
             
-            // 多層的な波の重ね合わせ（海の波のように）
+            // 多層的な波の重ね合わせ + カオス的なランダムノイズ（予測不可能な芸術）
+            let chaosNoise = Foundation.sin(phase * 7.3 + element.phaseOffset * 2.7) * 
+                           Foundation.cos(phase * 5.1 - element.phaseOffset * 1.9)
+            let turbulence = chaosNoise * 0.15 * element.personality
+            
             var flowX = (Foundation.sin(phase * freq1) * 0.35 +
                         Foundation.sin(phase * freq2 + element.phaseOffset) * 0.28 +
                         Foundation.sin(phase * freq3 + 2.5) * 0.22 +
-                        Foundation.sin(phase * freq4 + 1.8) * 0.15) * flowScale
+                        Foundation.sin(phase * freq4 + 1.8) * 0.15 +
+                        turbulence) * flowScale
             
             var flowY = (Foundation.cos(phase * freq1 * 0.88) * 0.35 +
                         Foundation.cos(phase * freq2 * 1.12 + element.phaseOffset) * 0.28 +
                         Foundation.cos(phase * freq3 * 0.76 + 1.7) * 0.22 +
-                        Foundation.cos(phase * freq4 * 1.25 + 0.9) * 0.15) * flowScale
+                        Foundation.cos(phase * freq4 * 1.25 + 0.9) * 0.15 +
+                        turbulence * 0.8) * flowScale
+            
+            // 各粒子が独自のランダムな動きパターンを持つ
+            if element.curiosity > 0.5 {
+                let randomWalk = Foundation.sin(phase * element.personality * 8.0) * 
+                               Foundation.cos(phase * element.curiosity * 6.0)
+                flowX += randomWalk * 0.001
+                flowY += randomWalk * 0.0008
+            }
             
             // デバイス傾きによる重力効果（目に見える自然な影響）
             // 深度によって傾きへの反応性を変える（奥のものほど遅く動く）
@@ -352,19 +435,49 @@ final class KaleidoscopeState {
             element.mood += (Double.random(in: -0.02...0.02) * element.personality)
             element.mood = max(0.0, min(1.0, element.mood))
             
-            // 周囲の粒子を感知（sociabilityが高いほど広範囲）
+            // 周囲の粒子を感知（sociabilityが高いほど広範囲）+ 衝突反発
             var nearbyCount = 0
             var attractionX: Double = 0
             var attractionY: Double = 0
+            var collisionForceX: Double = 0
+            var collisionForceY: Double = 0
             let awarenessRadius = 0.15 * element.sociability
             
-            for j in seedElements.indices where j != i {
+            // 最大5個の近い粒子のみチェック（軽量化）
+            var checkedCount = 0
+            let maxChecks = 5
+            
+            for j in seedElements.indices where j != i && checkedCount < maxChecks {
                 let other = seedElements[j]
                 let dx = other.position.x - element.position.x
                 let dy = other.position.y - element.position.y
-                let distance = sqrt(dx * dx + dy * dy)
+                let distanceSq = dx * dx + dy * dy
                 
-                if distance < awarenessRadius && distance > 0.001 {
+                // 衝突判定（距離の二乗で高速化）- より大きく強い反発
+                let collisionRadius = 0.08  // 衝突判定の半径を大きく
+                let collisionRadiusSq = collisionRadius * collisionRadius
+                
+                if distanceSq < collisionRadiusSq && distanceSq > 0.0001 {
+                    // 衝突している - ランダムな反発力を適用（予測不可能な動き）
+                    let distance = sqrt(distanceSq)
+                    let overlap = collisionRadius - distance
+                    let baseRepulsion = overlap * 1.2  // 反発力を強く
+                    
+                    // ランダムな反発角度でカオス的な動きを生成
+                    let randomAngle = Double.random(in: -0.3...0.3)
+                    let angle = atan2(dy, dx) + randomAngle
+                    
+                    collisionForceX -= Foundation.cos(angle) * baseRepulsion
+                    collisionForceY -= Foundation.sin(angle) * baseRepulsion
+                    
+                    // 衝突時にエネルギーとランダムな回転を付与
+                    seedElements[i].energy = min(1.0, element.energy + 0.3)
+                    seedElements[i].rotationSpeed += Double.random(in: -8...8)
+                    
+                    checkedCount += 1
+                } else if distanceSq < awarenessRadius * awarenessRadius && distanceSq > 0.001 {
+                    // 近くにいるが衝突していない - 通常の相互作用
+                    let distance = sqrt(distanceSq)
                     nearbyCount += 1
                     
                     // 社交的な粒子は他の粒子に惹かれる
@@ -378,8 +491,13 @@ final class KaleidoscopeState {
                         attractionX += Foundation.cos(phase * 3.0 + element.phaseOffset) * randomExplore
                         attractionY += Foundation.sin(phase * 3.0 + element.phaseOffset) * randomExplore
                     }
+                    checkedCount += 1
                 }
             }
+            
+            // 衝突力を速度に追加
+            element.velocity.x += collisionForceX
+            element.velocity.y += collisionForceY
             
             element.awareness = Double(nearbyCount) / 10.0
             

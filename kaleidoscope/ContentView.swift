@@ -69,14 +69,6 @@ struct ContentView: View {
                     Spacer()
                     
                     VStack(spacing: 20) {
-                        // パレットセレクター
-                        PaletteSelectorView(
-                            currentPalette: viewModel.currentPalette,
-                            onSelect: { palette in
-                                viewModel.changePalette(to: palette)
-                            }
-                        )
-                        
                         // メインツールバー
                         HStack(spacing: 24) {
                             // BGMボタン（タップで再生/停止、長押しで曲送り）

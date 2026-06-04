@@ -323,16 +323,18 @@ struct KaleidoscopeCanvasView: View {
             drawSimpleDot(context: &context, center: pos, radius: size, color: element.color)
         case .nebula:
             drawNebula(context: &context, center: pos, radius: size, color: element.color, phase: elementPhase)
-        case .curve, .wave, .arc:
+        case .curve, .wave, .arc, .wavyLine, .coil, .helix, .snake:
             drawEtherealThread(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
-        case .tendril, .spiral:
+        case .tendril, .spiral, .vine, .whip, .lasso:
             drawTendril(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
         case .droplet, .crescent:
             drawDroplet(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
         case .petal, .diamond:
             drawPetal(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
-        case .zigzag, .dash:
+        case .zigzag, .dash, .brokenLine, .lightning, .streak, .beam, .trail:
             drawZigzag(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
+        case .doubleLine, .tripleLine, .ribbon, .thread, .fiber, .braid, .chain, .rope:
+            drawEtherealThread(context: &context, center: pos, radius: size * 1.2, color: element.color, rotation: element.rotation, phase: elementPhase)
         case .ring, .ellipse:
             drawRing(context: &context, center: pos, radius: size, color: element.color, phase: elementPhase)
         case .triangle, .square, .hexagon, .cross:
