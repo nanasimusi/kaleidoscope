@@ -191,41 +191,22 @@ kernel void updateParticles(
         flowY += separationY * separationStrength;
     }
     
-    // 生物的な自由な躍動
-    float touchCenterX = 0.5 + params.touchOffsetX * 0.1;
-    float touchCenterY = 0.5 + params.touchOffsetY * 0.1;
-    float toTouchX = touchCenterX - particle.position.x;
-    float toTouchY = touchCenterY - particle.position.y;
-    float distanceToTouch = length(float2(toTouchX, toTouchY));
+    // === 環境からの影響（弱く） ===
     
-    if (distanceToTouch > 0.01) {
-        // 好奇心が高い個体は近づく、低い個体は避ける
-        float approachOrAvoid = (particle.curiosity - 0.5) * 2.0;  // -1.0 to 1.0
-        float touchInfluence = 0.0003 * approachOrAvoid / (distanceToTouch + 0.5);
-        flowX += toTouchX * touchInfluence;
-        flowY += toTouchY * touchInfluence;
+    // タッチ位置からの微弱な影響（引き寄せない、押し出さない、ただ少し影響を受ける程度）
+    if (particle.curiosity > 0.7) {
+        float touchCenterX = 0.5 + params.touchOffsetX * 0.1;
+        float touchCenterY = 0.5 + params.touchOffsetY * 0.1;
+        float toTouchX = touchCenterX - particle.position.x;
+        float toTouchY = touchCenterY - particle.position.y;
+        float distanceToTouch = length(float2(toTouchX, toTouchY));
         
-        // 時々タッチ位置の周りを泳ぐような動き
-        if (particle.curiosity > 0.6) {
-            float swimAngle = atan2(toTouchY, toTouchX) + sin(phase + particle.phaseOffset) * 1.5;
-            float swimStrength = 0.0004 * particle.curiosity;
-            flowX += cos(swimAngle) * swimStrength;
-            flowY += sin(swimAngle) * swimStrength;
+        if (distanceToTouch > 0.2 && distanceToTouch < 0.5) {
+            // 非常に弱い引力（好奇心が高い個体のみ、遠い場合のみ）
+            float weakAttraction = 0.0001 * particle.curiosity;
+            flowX += toTouchX * weakAttraction;
+            flowY += toTouchY * weakAttraction;
         }
-    }
-    
-    // 各個体が独自の「目的地」を持ち、そこへ向かう
-    float targetX = 0.3 + sin(particle.phaseOffset * 2.0 + phase * 0.1) * 0.4;
-    float targetY = 0.3 + cos(particle.phaseOffset * 3.0 + phase * 0.15) * 0.4;
-    float toTargetX = targetX - particle.position.x;
-    float toTargetY = targetY - particle.position.y;
-    float targetDistance = length(float2(toTargetX, toTargetY));
-    
-    if (targetDistance > 0.05) {
-        // 目的地へ向かう力
-        float targetSeekingStrength = 0.0002 * particle.personality;
-        flowX += toTargetX * targetSeekingStrength;
-        flowY += toTargetY * targetSeekingStrength;
     }
     
     // 速度更新

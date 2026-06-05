@@ -663,42 +663,22 @@ final class KaleidoscopeState {
             flowX += smoothTilt.x * tiltStrength * energyBoost
             flowY += smoothTilt.y * tiltStrength * energyBoost
             
-            // === 生物的な自由な躍動 ===
-            // タッチ位置は「興味の対象」として、近づくか避けるか個性で決める
-            let touchCenterX = 0.5 + smoothTouchOffset.x * 0.1
-            let touchCenterY = 0.5 + smoothTouchOffset.y * 0.1
-            let toTouchX = touchCenterX - element.position.x
-            let toTouchY = touchCenterY - element.position.y
-            let distanceToTouch = sqrt(toTouchX * toTouchX + toTouchY * toTouchY)
+            // === 環境からの影響（弱く） ===
             
-            if distanceToTouch > 0.01 {
-                // 好奇心が高い個体は近づく、低い個体は避ける
-                let approachOrAvoid = (element.curiosity - 0.5) * 2.0  // -1.0 to 1.0
-                let touchInfluence = 0.0003 * approachOrAvoid / (distanceToTouch + 0.5)
-                flowX += toTouchX * touchInfluence
-                flowY += toTouchY * touchInfluence
+            // タッチ位置からの微弱な影響（引き寄せない、押し出さない、ただ少し影響を受ける程度）
+            if element.curiosity > 0.7 {
+                let touchCenterX = 0.5 + smoothTouchOffset.x * 0.1
+                let touchCenterY = 0.5 + smoothTouchOffset.y * 0.1
+                let toTouchX = touchCenterX - element.position.x
+                let toTouchY = touchCenterY - element.position.y
+                let distanceToTouch = sqrt(toTouchX * toTouchX + toTouchY * toTouchY)
                 
-                // 時々タッチ位置の周りを泳ぐような動き
-                if element.curiosity > 0.6 {
-                    let swimAngle = atan2(toTouchY, toTouchX) + Foundation.sin(animationPhase + element.phaseOffset) * 1.5
-                    let swimStrength = 0.0004 * element.curiosity
-                    flowX += Foundation.cos(swimAngle) * swimStrength
-                    flowY += Foundation.sin(swimAngle) * swimStrength
+                if distanceToTouch > 0.2 && distanceToTouch < 0.5 {
+                    // 非常に弱い引力（好奇心が高い個体のみ、遠い場合のみ）
+                    let weakAttraction = 0.0001 * element.curiosity
+                    flowX += toTouchX * weakAttraction
+                    flowY += toTouchY * weakAttraction
                 }
-            }
-            
-            // 各個体が独自の「目的地」を持ち、そこへ向かう
-            let destinationX = 0.3 + Foundation.sin(element.phaseOffset * 2.0 + animationPhase * 0.1) * 0.4
-            let destinationY = 0.3 + Foundation.cos(element.phaseOffset * 3.0 + animationPhase * 0.15) * 0.4
-            let toDestinationX = destinationX - element.position.x
-            let toDestinationY = destinationY - element.position.y
-            let destinationDistance = sqrt(toDestinationX * toDestinationX + toDestinationY * toDestinationY)
-            
-            if destinationDistance > 0.05 {
-                // 目的地へ向かう力（personality高いほど強い意志）
-                let targetSeekingStrength = 0.0002 * element.personality
-                flowX += toDestinationX * targetSeekingStrength
-                flowY += toDestinationY * targetSeekingStrength
             }
             
             // === 生き物としての知性と感情に基づく動き ===
