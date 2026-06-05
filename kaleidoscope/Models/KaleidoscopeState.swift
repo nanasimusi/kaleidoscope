@@ -75,6 +75,24 @@ struct SeedElement: Identifiable {
     var mood: Double = 0.5   // 0.0-1.0: 静か <-> 活発
     var awareness: Double = 0.0  // 周囲への気づき
     
+    // Metal互換の便利プロパティ
+    var x: Double {
+        get { Double(position.x) }
+        set { position.x = CGFloat(newValue) }
+    }
+    var y: Double {
+        get { Double(position.y) }
+        set { position.y = CGFloat(newValue) }
+    }
+    var vx: Double {
+        get { Double(velocity.x) }
+        set { velocity.x = CGFloat(newValue) }
+    }
+    var vy: Double {
+        get { Double(velocity.y) }
+        set { velocity.y = CGFloat(newValue) }
+    }
+    
     static func random(colors: [Color], colorIndex: Int, depth: Double) -> SeedElement {
         // 線形パターンを大量に - 流れるような芸術体験
         let types: [ElementType] = [
@@ -228,12 +246,25 @@ final class KaleidoscopeState {
     var timeSinceLastPaletteChange: Double = 0.0
     var paletteChangeInterval: Double = Double.random(in: 8...15)  // ランダムな間隔で切り替え
     
+    // Metal GPU acceleration
+    private var metalEngine: MetalParticleEngine?
+    private var useMetal: Bool = false
+    
     init() {
         // ランダムなパレットで開始
         let randomPalette = ColorPalette.allCases.randomElement()!
         targetPaletteColors = randomPalette.colors
         currentPaletteColors = randomPalette.colors
         randomize(with: randomPalette.colors)
+        
+        // Metal engineを初期化
+        if let engine = MetalParticleEngine() {
+            metalEngine = engine
+            useMetal = true
+            print("✅ Metal GPU acceleration enabled")
+        } else {
+            print("⚠️ Metal not available, using CPU fallback")
+        }
     }
     
     func randomize(with colors: [Color]) {
@@ -242,6 +273,11 @@ final class KaleidoscopeState {
         seedElements = (0..<elementCount).map { index in
             let depth = Double(index) / Double(elementCount)
             return SeedElement.random(colors: colors, colorIndex: index, depth: depth)
+        }
+        
+        // Metal bufferを初期化
+        if useMetal {
+            metalEngine?.initializeParticles(count: seedElements.count)
         }
     }
     
@@ -375,8 +411,45 @@ final class KaleidoscopeState {
             timeSinceLastPaletteChange = 0.0
         }
         
-        for i in seedElements.indices {
-            var element = seedElements[i]
+        // === GPU ACCELERATION WITH METAL ===
+        if useMetal, let engine = metalEngine {
+            // Metal GPUで物理演算を実行
+            engine.updateParticleData(from: seedElements)
+            
+            engine.simulate(
+                particleCount: seedElements.count,
+                deltaTime: smoothDelta,
+                phase: animationPhase,
+                touchX: 0.5,  // 正規化された座標
+                touchY: 0.5,
+                touchOffsetX: smoothTouchOffset.x,
+                touchOffsetY: smoothTouchOffset.y,
+                tiltX: smoothTilt.x,
+                tiltY: smoothTilt.y,
+                kineticEnergy: effectiveEnergy
+            )
+            
+            engine.readParticleData(to: &seedElements)
+            
+            // 色とサイズのアニメーションはCPUで（軽量）
+            for i in seedElements.indices {
+                var element = seedElements[i]
+                let phase = animationPhase + element.phaseOffset
+                
+                // 回転は既にMetalで計算済み
+                
+                // タッチによる視差効果
+                let depthFactor = 1.0 - element.depth * 0.6
+                let touchInfluence = 0.08 * depthFactor * depthFactor
+                element.position.x += smoothTouchOffset.x * touchInfluence * smoothDelta
+                element.position.y += smoothTouchOffset.y * touchInfluence * smoothDelta
+                
+                seedElements[i] = element
+            }
+        } else {
+            // CPU版のフォールバック（元のコード）
+            for i in seedElements.indices {
+                var element = seedElements[i]
             
             // Energy decay with kinetic influence - より緩やかに
             let energyDecay = exp(-1.5 * smoothDelta)
@@ -582,6 +655,7 @@ final class KaleidoscopeState {
             element.rotation += Angle(degrees: (element.rotationSpeed + baseRotation) * smoothDelta * 45 * rotationIntensity)
             
             seedElements[i] = element
+            }
         }
     }
     
