@@ -221,15 +221,34 @@ struct KaleidoscopeCanvasView: View {
     ) {
         let sectorAngle = (2.0 * Double.pi) / Double(symmetryCount)
         
+        // 対称性崩壊エフェクト用のランダムオフセット
+        let breakingStrength = state.symmetryBreaking
+        
         context.drawLayer { ctx in
             ctx.opacity = opacity
             
             for i in 0..<symmetryCount {
-                let rotationAngle = Double(i) * sectorAngle + rotation
+                var rotationAngle = Double(i) * sectorAngle + rotation
+                
+                // 対称性崩壊: 各セクターにランダムな回転とオフセット
+                if breakingStrength > 0 {
+                    let randomSeed = Double(i) * 123.456  // 各セクターで一貫したランダム値
+                    let randomOffset = sin(randomSeed + animationPhase * 0.5) * breakingStrength * 0.3
+                    rotationAngle += randomOffset
+                }
                 
                 ctx.drawLayer { sectorCtx in
                     sectorCtx.translateBy(x: center.x, y: center.y)
                     sectorCtx.rotate(by: Angle(radians: rotationAngle))
+                    
+                    // 対称性崩壊: 各セクターの位置をずらす
+                    if breakingStrength > 0 {
+                        let randomSeed = Double(i) * 456.789
+                        let offsetX = cos(randomSeed + animationPhase * 0.3) * breakingStrength * 20
+                        let offsetY = sin(randomSeed + animationPhase * 0.3) * breakingStrength * 20
+                        sectorCtx.translateBy(x: offsetX, y: offsetY)
+                    }
+                    
                     sectorCtx.translateBy(x: -center.x, y: -center.y)
                     
                     for element in elements {
@@ -247,6 +266,15 @@ struct KaleidoscopeCanvasView: View {
                     mirrorCtx.translateBy(x: center.x, y: center.y)
                     mirrorCtx.rotate(by: Angle(radians: rotationAngle))
                     mirrorCtx.scaleBy(x: -1, y: 1)
+                    
+                    // 対称性崩壊: ミラーセクターも独立して動く
+                    if breakingStrength > 0 {
+                        let randomSeed = Double(i) * 789.123 + 100  // ミラー用の別のシード
+                        let offsetX = cos(randomSeed + animationPhase * 0.3) * breakingStrength * 15
+                        let offsetY = sin(randomSeed + animationPhase * 0.3) * breakingStrength * 15
+                        mirrorCtx.translateBy(x: offsetX, y: offsetY)
+                    }
+                    
                     mirrorCtx.translateBy(x: -center.x, y: -center.y)
                     
                     for element in elements {

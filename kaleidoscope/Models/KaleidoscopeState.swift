@@ -212,6 +212,10 @@ struct TapRipple: Identifiable {
 @Observable
 final class KaleidoscopeState {
     var symmetryCount: Int = 8
+    var targetSymmetryCount: Int = 8
+    var symmetryTransitionProgress: Double = 1.0  // 0-1: 対称性の遷移
+    var symmetryBreaking: Double = 0.0  // 0-1: 対称性の崩壊度
+    
     var seedElements: [SeedElement] = []
     var animationPhase: Double = 0
     var touchOffset: CGPoint = .zero
@@ -246,9 +250,26 @@ final class KaleidoscopeState {
     var timeSinceLastPaletteChange: Double = 0.0
     var paletteChangeInterval: Double = Double.random(in: 8...15)  // ランダムな間隔で切り替え
     
+    // 生成アルゴリズムの自動切り替え
+    var currentGenerationAlgorithm: GenerationAlgorithm = .random
+    var timeSinceLastAlgorithmChange: Double = 0.0
+    var algorithmChangeInterval: Double = Double.random(in: 20...40)  // パレットよりも長い間隔
+    
+    // 対称性の自動変化
+    var timeSinceLastSymmetryChange: Double = 0.0
+    var symmetryChangeInterval: Double = Double.random(in: 15...30)
+    
+    // 対称性の崩壊エフェクト
+    var symmetryBreakingActive: Bool = false
+    var symmetryBreakingDuration: Double = 0.0
+    
     // Metal GPU acceleration
     private var metalEngine: MetalParticleEngine?
     private var useMetal: Bool = false
+    
+    // 適応的パフォーマンス管理
+    private(set) var performanceMonitor = PerformanceMonitor()
+    private var lastQuality: QualityLevel = .medium
     
     init() {
         // ランダムなパレットで開始
@@ -268,12 +289,11 @@ final class KaleidoscopeState {
     }
     
     func randomize(with colors: [Color]) {
-        // 無数の粒子が生き物のように動く
-        let elementCount = Int.random(in: 30...50)
-        seedElements = (0..<elementCount).map { index in
-            let depth = Double(index) / Double(elementCount)
-            return SeedElement.random(colors: colors, colorIndex: index, depth: depth)
-        }
+        // 品質レベルに応じた粒子数
+        let quality = performanceMonitor.currentQuality
+        let elementCount = Int.random(in: quality.particleCountRange)
+        
+        seedElements = currentGenerationAlgorithm.generate(count: elementCount, colors: colors)
         
         // Metal bufferを初期化
         if useMetal {
@@ -326,6 +346,15 @@ final class KaleidoscopeState {
     
     func evolve(deltaTime: Double) {
         let smoothDelta = min(deltaTime, 0.033)
+        
+        // === PERFORMANCE MONITORING ===
+        performanceMonitor.recordFrame(deltaTime: deltaTime)
+        
+        // 品質が変更されたら粒子を再生成
+        if performanceMonitor.currentQuality != lastQuality {
+            lastQuality = performanceMonitor.currentQuality
+            randomize(with: currentPaletteColors)
+        }
         
         // === KINETIC ENERGY DECAY SYSTEM ===
         // Gradually slow down over time (like a spinning top) - 極めて緩やかに
@@ -409,6 +438,84 @@ final class KaleidoscopeState {
             // 次回の切り替え間隔もランダムに
             paletteChangeInterval = Double.random(in: 8...15)
             timeSinceLastPaletteChange = 0.0
+        }
+        
+        // 自動アルゴリズム切り替え - より長い間隔で
+        timeSinceLastAlgorithmChange += smoothDelta
+        if timeSinceLastAlgorithmChange >= algorithmChangeInterval {
+            // ランダムな新しいアルゴリズムに切り替え
+            let allAlgorithms = GenerationAlgorithm.allCases
+            let newAlgorithm = allAlgorithms.randomElement()!
+            
+            if newAlgorithm != currentGenerationAlgorithm {
+                currentGenerationAlgorithm = newAlgorithm
+                print("🎨 Generation algorithm changed to: \(newAlgorithm.name)")
+                
+                // 新しいアルゴリズムで粒子を再生成
+                randomize(with: currentPaletteColors)
+            }
+            
+            // 次回の切り替え間隔もランダムに
+            algorithmChangeInterval = Double.random(in: 20...40)
+            timeSinceLastAlgorithmChange = 0.0
+        }
+        
+        // 自動対称性変更 - ランダムな対称性で視覚的多様性
+        timeSinceLastSymmetryChange += smoothDelta
+        if timeSinceLastSymmetryChange >= symmetryChangeInterval {
+            // 対称性の種類: 3, 4, 5, 6, 8, 10, 12, 16
+            let symmetries = [3, 4, 5, 6, 8, 10, 12, 16]
+            let newSymmetry = symmetries.randomElement()!
+            
+            if newSymmetry != targetSymmetryCount {
+                targetSymmetryCount = newSymmetry
+                symmetryTransitionProgress = 0.0
+                print("✨ Symmetry changing to: \(newSymmetry)")
+                
+                // 10%の確率で対称性崩壊エフェクト
+                if Double.random(in: 0...1) < 0.1 {
+                    symmetryBreakingActive = true
+                    symmetryBreakingDuration = 0.0
+                    print("💥 Symmetry breaking activated!")
+                }
+            }
+            
+            // 次回の切り替え間隔
+            symmetryChangeInterval = Double.random(in: 15...30)
+            timeSinceLastSymmetryChange = 0.0
+        }
+        
+        // 対称性の遷移をスムーズに
+        if symmetryTransitionProgress < 1.0 {
+            symmetryTransitionProgress = min(1.0, symmetryTransitionProgress + smoothDelta * 0.3)
+            
+            // イージング（スムーズな遷移）
+            let eased = 1.0 - pow(1.0 - symmetryTransitionProgress, 3.0)
+            let interpolated = Double(symmetryCount) * (1.0 - eased) + Double(targetSymmetryCount) * eased
+            
+            // 遷移完了時に正確な値に設定
+            if symmetryTransitionProgress >= 1.0 {
+                symmetryCount = targetSymmetryCount
+            }
+        }
+        
+        // 対称性崩壊エフェクト
+        if symmetryBreakingActive {
+            symmetryBreakingDuration += smoothDelta
+            
+            // 0→1→0 の山型カーブ
+            let breakProgress = min(1.0, symmetryBreakingDuration / 3.0)
+            if breakProgress < 0.5 {
+                symmetryBreaking = breakProgress * 2.0  // 0→1
+            } else {
+                symmetryBreaking = 2.0 - breakProgress * 2.0  // 1→0
+            }
+            
+            // 3秒後に終了
+            if symmetryBreakingDuration >= 3.0 {
+                symmetryBreakingActive = false
+                symmetryBreaking = 0.0
+            }
         }
         
         // === GPU ACCELERATION WITH METAL ===
@@ -516,11 +623,14 @@ final class KaleidoscopeState {
             var collisionForceY: Double = 0
             let awarenessRadius = 0.15 * element.sociability
             
-            // 最大5個の近い粒子のみチェック（軽量化）
+            // 品質に応じた衝突検出
             var checkedCount = 0
-            let maxChecks = 5
+            let maxChecks = performanceMonitor.currentQuality.maxCollisionChecks
+            let enableCollision = performanceMonitor.currentQuality.enableCollisionDetection
             
-            for j in seedElements.indices where j != i && checkedCount < maxChecks {
+            // 衝突検出が有効な場合のみ実行
+            if enableCollision {
+                for j in seedElements.indices where j != i && checkedCount < maxChecks {
                 let other = seedElements[j]
                 let dx = other.position.x - element.position.x
                 let dy = other.position.y - element.position.y
@@ -565,6 +675,7 @@ final class KaleidoscopeState {
                         attractionY += Foundation.sin(phase * 3.0 + element.phaseOffset) * randomExplore
                     }
                     checkedCount += 1
+                }
                 }
             }
             
