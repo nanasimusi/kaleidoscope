@@ -639,8 +639,8 @@ final class KaleidoscopeState {
             flowX += smoothTilt.x * tiltStrength * energyBoost
             flowY += smoothTilt.y * tiltStrength * energyBoost
             
-            // === 磁場のような力場エフェクト ===
-            // タッチ位置を中心とした渦巻き磁場
+            // === 生物的な自由な躍動 ===
+            // タッチ位置は「興味の対象」として、近づくか避けるか個性で決める
             let touchCenterX = 0.5 + smoothTouchOffset.x * 0.1
             let touchCenterY = 0.5 + smoothTouchOffset.y * 0.1
             let toTouchX = touchCenterX - element.position.x
@@ -648,25 +648,34 @@ final class KaleidoscopeState {
             let distanceToTouch = sqrt(toTouchX * toTouchX + toTouchY * toTouchY)
             
             if distanceToTouch > 0.01 {
-                // 渦巻き力（右回り）
-                let vortexAngle = atan2(toTouchY, toTouchX) + Double.pi / 2
-                let vortexStrength = (1.0 / (distanceToTouch + 0.1)) * 0.0008 * element.curiosity
-                flowX += Foundation.cos(vortexAngle) * vortexStrength
-                flowY += Foundation.sin(vortexAngle) * vortexStrength
+                // 好奇心が高い個体は近づく、低い個体は避ける
+                let approachOrAvoid = (element.curiosity - 0.5) * 2.0  // -1.0 to 1.0
+                let touchInfluence = 0.0003 * approachOrAvoid / (distanceToTouch + 0.5)
+                flowX += toTouchX * touchInfluence
+                flowY += toTouchY * touchInfluence
                 
-                // 引力/斥力（タッチ時のエネルギーに応じて）
-                let magneticStrength = Foundation.sin(animationPhase * 0.5) * 0.0005
-                flowX += toTouchX * magneticStrength
-                flowY += toTouchY * magneticStrength
+                // 時々タッチ位置の周りを泳ぐような動き
+                if element.curiosity > 0.6 {
+                    let swimAngle = atan2(toTouchY, toTouchX) + Foundation.sin(animationPhase + element.phaseOffset) * 1.5
+                    let swimStrength = 0.0004 * element.curiosity
+                    flowX += Foundation.cos(swimAngle) * swimStrength
+                    flowY += Foundation.sin(swimAngle) * swimStrength
+                }
             }
             
-            // 画面中心からの放射状の力（呼吸するように）
-            let toCenterX = 0.5 - element.position.x
-            let toCenterY = 0.5 - element.position.y
-            let distanceFromCenter = sqrt(toCenterX * toCenterX + toCenterY * toCenterY)
-            let breathe = Foundation.sin(animationPhase * 0.3 + element.phaseOffset) * 0.0002
-            flowX += toCenterX * breathe
-            flowY += toCenterY * breathe
+            // 各個体が独自の「目的地」を持ち、そこへ向かう
+            let destinationX = 0.3 + Foundation.sin(element.phaseOffset * 2.0 + animationPhase * 0.1) * 0.4
+            let destinationY = 0.3 + Foundation.cos(element.phaseOffset * 3.0 + animationPhase * 0.15) * 0.4
+            let toDestinationX = destinationX - element.position.x
+            let toDestinationY = destinationY - element.position.y
+            let destinationDistance = sqrt(toDestinationX * toDestinationX + toDestinationY * toDestinationY)
+            
+            if destinationDistance > 0.05 {
+                // 目的地へ向かう力（personality高いほど強い意志）
+                let targetSeekingStrength = 0.0002 * element.personality
+                flowX += toDestinationX * targetSeekingStrength
+                flowY += toDestinationY * targetSeekingStrength
+            }
             
             // === 生き物としての知性と感情に基づく動き ===
             

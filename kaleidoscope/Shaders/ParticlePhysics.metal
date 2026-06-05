@@ -182,7 +182,7 @@ kernel void updateParticles(
         flowY += separationY * separationStrength;
     }
     
-    // 磁場のような力場
+    // 生物的な自由な躍動
     float touchCenterX = 0.5 + params.touchOffsetX * 0.1;
     float touchCenterY = 0.5 + params.touchOffsetY * 0.1;
     float toTouchX = touchCenterX - particle.position.x;
@@ -190,24 +190,34 @@ kernel void updateParticles(
     float distanceToTouch = length(float2(toTouchX, toTouchY));
     
     if (distanceToTouch > 0.01) {
-        // 渦巻き力
-        float vortexAngle = atan2(toTouchY, toTouchX) + 3.14159 / 2.0;
-        float vortexStrength = (1.0 / (distanceToTouch + 0.1)) * 0.0008 * particle.curiosity;
-        flowX += cos(vortexAngle) * vortexStrength;
-        flowY += sin(vortexAngle) * vortexStrength;
+        // 好奇心が高い個体は近づく、低い個体は避ける
+        float approachOrAvoid = (particle.curiosity - 0.5) * 2.0;  // -1.0 to 1.0
+        float touchInfluence = 0.0003 * approachOrAvoid / (distanceToTouch + 0.5);
+        flowX += toTouchX * touchInfluence;
+        flowY += toTouchY * touchInfluence;
         
-        // 引力/斥力
-        float magneticStrength = sin(phase * 0.5) * 0.0005;
-        flowX += toTouchX * magneticStrength;
-        flowY += toTouchY * magneticStrength;
+        // 時々タッチ位置の周りを泳ぐような動き
+        if (particle.curiosity > 0.6) {
+            float swimAngle = atan2(toTouchY, toTouchX) + sin(phase + particle.phaseOffset) * 1.5;
+            float swimStrength = 0.0004 * particle.curiosity;
+            flowX += cos(swimAngle) * swimStrength;
+            flowY += sin(swimAngle) * swimStrength;
+        }
     }
     
-    // 中心からの呼吸
-    float toCenterX = 0.5 - particle.position.x;
-    float toCenterY = 0.5 - particle.position.y;
-    float breathe = sin(phase * 0.3 + particle.phaseOffset) * 0.0002;
-    flowX += toCenterX * breathe;
-    flowY += toCenterY * breathe;
+    // 各個体が独自の「目的地」を持ち、そこへ向かう
+    float targetX = 0.3 + sin(particle.phaseOffset * 2.0 + phase * 0.1) * 0.4;
+    float targetY = 0.3 + cos(particle.phaseOffset * 3.0 + phase * 0.15) * 0.4;
+    float toTargetX = targetX - particle.position.x;
+    float toTargetY = targetY - particle.position.y;
+    float targetDistance = length(float2(toTargetX, toTargetY));
+    
+    if (targetDistance > 0.05) {
+        // 目的地へ向かう力
+        float targetSeekingStrength = 0.0002 * particle.personality;
+        flowX += toTargetX * targetSeekingStrength;
+        flowY += toTargetY * targetSeekingStrength;
+    }
     
     // 速度更新
     particle.velocity.x += (flowX + collisionForceX) * dt * params.kineticEnergy;
