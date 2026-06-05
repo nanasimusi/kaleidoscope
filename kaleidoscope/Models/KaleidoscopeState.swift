@@ -597,42 +597,32 @@ final class KaleidoscopeState {
             let phase = animationPhase + element.phaseOffset
             let energyBoost = 1.0 + element.energy * 1.5
             
-            // === 予測不可能な有機的な動き（円運動を排除） ===
+            // === 完全に自由な生物的動き ===
             
-            // 個性に基づく動きの多様性
-            let baseSpeed = 0.003 * effectiveEnergy * energyBoost
-            let personalityInfluence = element.personality * 1.5 + 0.5
+            // 基本となる慣性の力（現在の速度を維持しようとする）
+            var flowX = element.velocity.x * 0.5
+            var flowY = element.velocity.y * 0.5
             
-            // ランダムウォーク（ブラウン運動）- sin/cosを使わない
-            // 速度をランダムに微調整して予測不可能な動きを作る
-            let randomAngleChange = (Foundation.sin(phase * 13.7 + element.phaseOffset * 7.3) + 
-                                    Foundation.cos(phase * 17.3 - element.phaseOffset * 11.1)) * 0.5
+            // ランダムな力を常に加える（ブラウン運動）
+            let randomForceX = Double.random(in: -0.001...0.001) * element.personality
+            let randomForceY = Double.random(in: -0.001...0.001) * element.personality
+            flowX += randomForceX
+            flowY += randomForceY
             
-            // 現在の速度方向を少しずつ変える（慣性を保ちつつランダムに曲がる）
-            let currentAngle = atan2(element.velocity.y, element.velocity.x)
-            let newAngle = currentAngle + randomAngleChange * 0.1  // 小さな角度変化
-            
-            // ランダムな強度変化
-            let speedVariation = 1.0 + Foundation.sin(phase * 7.1 + element.phaseOffset * 5.3) * 0.3
-            
-            // 新しい方向へ加速（円運動にならない）
-            var flowX = Foundation.cos(newAngle) * baseSpeed * personalityInfluence * speedVariation
-            var flowY = Foundation.sin(newAngle) * baseSpeed * personalityInfluence * speedVariation
-            
-            // ランダムな衝動（突然の方向転換）
-            if Double.random(in: 0...1) < 0.02 {  // 2%の確率で
-                let impulseAngle = Double.random(in: 0...(2 * Double.pi))
-                let impulseStrength = Double.random(in: 0.002...0.006) * element.curiosity
-                flowX += Foundation.cos(impulseAngle) * impulseStrength
-                flowY += Foundation.sin(impulseAngle) * impulseStrength
+            // 好奇心が高い個体はより活発に動く
+            if element.curiosity > 0.5 {
+                let activeForceX = Double.random(in: -0.002...0.002) * element.curiosity
+                let activeForceY = Double.random(in: -0.002...0.002) * element.curiosity
+                flowX += activeForceX
+                flowY += activeForceY
             }
             
-            // 探索行動（ランダムな方向へ探索）
-            if element.curiosity > 0.6 && Double.random(in: 0...1) < 0.05 {
-                let exploreAngle = Double.random(in: 0...(2 * Double.pi))
-                let exploreStrength = 0.004 * element.curiosity
-                flowX += Foundation.cos(exploreAngle) * exploreStrength
-                flowY += Foundation.sin(exploreAngle) * exploreStrength
+            // 時々大きく方向転換（魚が急に向きを変えるような動き）
+            if Double.random(in: 0...1) < 0.01 {
+                let turnX = Double.random(in: -0.01...0.01)
+                let turnY = Double.random(in: -0.01...0.01)
+                flowX += turnX
+                flowY += turnY
             }
             
             // 内向的な粒子は時々静止する

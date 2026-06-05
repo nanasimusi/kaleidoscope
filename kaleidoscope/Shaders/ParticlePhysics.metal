@@ -51,43 +51,40 @@ kernel void updateParticles(
     float dt = params.deltaTime;
     float phase = params.phase;
     
-    // === 予測不可能な有機的な動き（円運動を排除） ===
+    // === 完全に自由な生物的動き ===
     
-    float baseSpeed = 0.003 * params.kineticEnergy;
-    float personalityInfluence = particle.personality * 1.5 + 0.5;
+    // 基本となる慣性の力（現在の速度を維持しようとする）
+    float flowX = particle.velocity.x * 0.5;
+    float flowY = particle.velocity.y * 0.5;
     
-    // ランダムウォーク（ブラウン運動）- sin/cosによる円運動を排除
-    float randomAngleChange = (sin(phase * 13.7 + particle.phaseOffset * 7.3) + 
-                               cos(phase * 17.3 - particle.phaseOffset * 11.1)) * 0.5;
+    // ランダムな力を常に加える（ブラウン運動）
+    // Metal版では疑似ランダムを使用
+    float rand1 = fract(sin(phase * 12.9898 + particle.phaseOffset * 78.233) * 43758.5453);
+    float rand2 = fract(sin(phase * 93.9898 + particle.phaseOffset * 47.593) * 21983.1253);
+    float randomForceX = (rand1 - 0.5) * 0.002 * particle.personality;
+    float randomForceY = (rand2 - 0.5) * 0.002 * particle.personality;
+    flowX += randomForceX;
+    flowY += randomForceY;
     
-    // 現在の速度方向を少しずつ変える（慣性を保ちつつランダムに曲がる）
-    float currentAngle = atan2(particle.velocity.y, particle.velocity.x);
-    float newAngle = currentAngle + randomAngleChange * 0.1;
-    
-    // ランダムな強度変化
-    float speedVariation = 1.0 + sin(phase * 7.1 + particle.phaseOffset * 5.3) * 0.3;
-    
-    // 新しい方向へ加速（円運動にならない）
-    float flowX = cos(newAngle) * baseSpeed * personalityInfluence * speedVariation;
-    float flowY = sin(newAngle) * baseSpeed * personalityInfluence * speedVariation;
-    
-    // ランダムな衝動（突然の方向転換）
-    // Metal版ではランダム関数がないので疑似ランダムを使用
-    float randomImpulse = fract(sin(phase * 12.9898 + particle.phaseOffset * 78.233) * 43758.5453);
-    if (randomImpulse < 0.02) {  // 2%の確率
-        float impulseAngle = randomImpulse * 6.28318;  // 0 to 2*PI
-        float impulseStrength = (0.002 + randomImpulse * 0.004) * particle.curiosity;
-        flowX += cos(impulseAngle) * impulseStrength;
-        flowY += sin(impulseAngle) * impulseStrength;
+    // 好奇心が高い個体はより活発に動く
+    if (particle.curiosity > 0.5) {
+        float rand3 = fract(sin(phase * 45.1234 + particle.phaseOffset * 23.456) * 31456.7890);
+        float rand4 = fract(sin(phase * 67.8901 + particle.phaseOffset * 34.567) * 54321.9876);
+        float activeForceX = (rand3 - 0.5) * 0.004 * particle.curiosity;
+        float activeForceY = (rand4 - 0.5) * 0.004 * particle.curiosity;
+        flowX += activeForceX;
+        flowY += activeForceY;
     }
     
-    // 探索行動（ランダムな方向へ探索）
-    float randomExplore = fract(sin(phase * 23.1406 + particle.phaseOffset * 56.789) * 19134.4521);
-    if (particle.curiosity > 0.6 && randomExplore < 0.05) {
-        float exploreAngle = randomExplore * 6.28318;
-        float exploreStrength = 0.004 * particle.curiosity;
-        flowX += cos(exploreAngle) * exploreStrength;
-        flowY += sin(exploreAngle) * exploreStrength;
+    // 時々大きく方向転換（魚が急に向きを変えるような動き）
+    float randTurn = fract(sin(phase * 78.4561 + particle.phaseOffset * 91.234) * 65432.1098);
+    if (randTurn < 0.01) {
+        float rand5 = fract(sin(phase * 34.5678 + particle.phaseOffset * 12.345) * 87654.3210);
+        float rand6 = fract(sin(phase * 56.7890 + particle.phaseOffset * 89.012) * 98765.4321);
+        float turnX = (rand5 - 0.5) * 0.02;
+        float turnY = (rand6 - 0.5) * 0.02;
+        flowX += turnX;
+        flowY += turnY;
     }
     
     // 内向的な粒子の静止
