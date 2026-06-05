@@ -51,46 +51,52 @@ kernel void updateParticles(
     float dt = params.deltaTime;
     float phase = params.phase;
     
-    // タッチによる引力（中心からの相対位置）
-    float touchAttractionX = (params.touchX - 0.5) * 0.8;
-    float touchAttractionY = (params.touchY - 0.5) * 0.8;
+    // === 予測不可能な有機的な動き ===
     
-    // デバイス傾きによる重力的な流れ
-    float tiltFlowX = params.tiltX * 0.15;
-    float tiltFlowY = params.tiltY * 0.15;
+    float baseSpeed = 0.0015 * params.kineticEnergy;
+    float personalityInfluence = particle.personality * 2.0 + 0.5;
     
-    // 渦巻き流れ（personality依存）
-    float angle = atan2(particle.position.y, particle.position.x);
-    float radius = length(particle.position);
-    float vortexStrength = 0.08 * particle.personality;
-    float vortexX = -sin(angle) * vortexStrength;
-    float vortexY = cos(angle) * vortexStrength;
+    // パーリンノイズ風の複雑な動き
+    float noiseX1 = sin(phase * 1.3 + particle.phaseOffset) * cos(phase * 0.7 + particle.personality * 10.0);
+    float noiseX2 = sin(phase * 2.1 - particle.phaseOffset * 0.5) * cos(phase * 1.9 + particle.curiosity * 15.0);
+    float noiseX3 = sin(phase * 0.5 + particle.sociability * 8.0) * cos(phase * 3.2 - particle.phaseOffset);
     
-    // 外向き/内向きのパルス（curiosity依存）
-    float pulseStrength = sin(phase * 2.0 + particle.phaseOffset) * 0.03 * particle.curiosity;
-    float pulseX = particle.position.x * pulseStrength;
-    float pulseY = particle.position.y * pulseStrength;
+    float noiseY1 = cos(phase * 1.5 - particle.phaseOffset) * sin(phase * 0.9 + particle.personality * 12.0);
+    float noiseY2 = cos(phase * 1.8 + particle.phaseOffset * 0.7) * sin(phase * 2.3 - particle.curiosity * 18.0);
+    float noiseY3 = cos(phase * 0.7 - particle.sociability * 9.0) * sin(phase * 2.9 + particle.phaseOffset);
     
-    // カオス的なランダムノイズ
-    float turbulence = chaosNoise(phase, particle.phaseOffset) * 0.15 * particle.personality;
+    // レヴィフライト（突発的な大きな移動）
+    float levyFlight = sin(phase * 0.3 + particle.phaseOffset * 3.0);
+    float jumpMultiplier = (levyFlight > 0.95) ? 5.0 : 1.0;
     
-    // ランダムウォーク（curiosity > 0.5の場合）
-    float randomX = 0.0;
-    float randomY = 0.0;
-    if (particle.curiosity > 0.5) {
-        float walk = randomWalk(phase, particle.personality, particle.curiosity);
-        randomX = walk * 0.001;
-        randomY = walk * 0.0008;
+    // フラクタルノイズ
+    float flowX = (noiseX1 * 0.4 + noiseX2 * 0.3 + noiseX3 * 0.3) * baseSpeed * personalityInfluence * jumpMultiplier;
+    float flowY = (noiseY1 * 0.4 + noiseY2 * 0.3 + noiseY3 * 0.3) * baseSpeed * personalityInfluence * jumpMultiplier;
+    
+    // 探索行動
+    if (particle.curiosity > 0.6) {
+        float exploreAngle = phase * particle.curiosity * 2.0 + particle.phaseOffset;
+        float exploreRadius = sin(phase * 0.4 + particle.curiosity * 5.0) * 0.002;
+        flowX += cos(exploreAngle) * exploreRadius * particle.curiosity;
+        flowY += sin(exploreAngle) * exploreRadius * particle.curiosity;
     }
     
-    // 全体の流れを統合
-    float flowX = touchAttractionX + tiltFlowX + vortexX + pulseX + turbulence + randomX;
-    float flowY = touchAttractionY + tiltFlowY + vortexY + pulseY + turbulence + randomY;
+    // 内向的な粒子の静止
+    if (particle.personality < 0.3) {
+        float pauseProbability = sin(phase * 0.8 + particle.phaseOffset * 2.0);
+        if (pauseProbability > 0.7) {
+            flowX *= 0.1;
+            flowY *= 0.1;
+        }
+    }
+    
+    // デバイス傾きによる重力
+    flowX += params.tiltX * 0.025 * params.kineticEnergy;
+    flowY += params.tiltY * 0.025 * params.kineticEnergy;
     
     // タッチオフセットによる慣性
-    float offsetInfluence = 0.15;
-    flowX += params.touchOffsetX * offsetInfluence * particle.sociability;
-    flowY += params.touchOffsetY * offsetInfluence * particle.sociability;
+    flowX += params.touchOffsetX * 0.15 * particle.sociability;
+    flowY += params.touchOffsetY * 0.15 * particle.sociability;
     
     // 衝突反発力 + Boids群れ行動（軽量版：最大5個チェック）
     float collisionForceX = 0.0;

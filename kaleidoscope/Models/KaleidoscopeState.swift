@@ -579,38 +579,55 @@ final class KaleidoscopeState {
             let phase = animationPhase + element.phaseOffset
             let energyBoost = 1.0 + element.energy * 1.5
             
-            // 生命のような複雑な有機的フロー - 呼吸する海流のイメージ
-            let flowScale = effectiveEnergy * 0.002 * energyBoost
+            // === 予測不可能な有機的な動き ===
             
-            // 各エレメントごとに異なる周波数（個性を持たせる）
-            let freq1 = 0.11 + element.depth * 0.04 + Foundation.sin(element.phaseOffset) * 0.02
-            let freq2 = 0.22 + element.depth * 0.07 + Foundation.cos(element.phaseOffset * 1.3) * 0.03
-            let freq3 = 0.06 + element.depth * 0.025 + Foundation.sin(element.phaseOffset * 0.7) * 0.015
-            let freq4 = 0.15 + element.depth * 0.055 + Foundation.cos(element.phaseOffset * 1.7) * 0.025
+            // 個性に基づく動きの多様性
+            let baseSpeed = 0.0015 * effectiveEnergy * energyBoost
+            let personalityInfluence = element.personality * 2.0 + 0.5  // 0.5-2.5の範囲
             
-            // 多層的な波の重ね合わせ + カオス的なランダムノイズ（予測不可能な芸術）
-            let chaosNoise = Foundation.sin(phase * 7.3 + element.phaseOffset * 2.7) * 
-                           Foundation.cos(phase * 5.1 - element.phaseOffset * 1.9)
-            let turbulence = chaosNoise * 0.15 * element.personality
+            // パーリンノイズ風の複雑な動き
+            let noiseX1 = Foundation.sin(phase * 1.3 + element.phaseOffset) * Foundation.cos(phase * 0.7 + element.personality * 10)
+            let noiseX2 = Foundation.sin(phase * 2.1 - element.phaseOffset * 0.5) * Foundation.cos(phase * 1.9 + element.curiosity * 15)
+            let noiseX3 = Foundation.sin(phase * 0.5 + element.sociability * 8) * Foundation.cos(phase * 3.2 - element.phaseOffset)
             
-            var flowX = (Foundation.sin(phase * freq1) * 0.35 +
-                        Foundation.sin(phase * freq2 + element.phaseOffset) * 0.28 +
-                        Foundation.sin(phase * freq3 + 2.5) * 0.22 +
-                        Foundation.sin(phase * freq4 + 1.8) * 0.15 +
-                        turbulence) * flowScale
+            let noiseY1 = Foundation.cos(phase * 1.5 - element.phaseOffset) * Foundation.sin(phase * 0.9 + element.personality * 12)
+            let noiseY2 = Foundation.cos(phase * 1.8 + element.phaseOffset * 0.7) * Foundation.sin(phase * 2.3 - element.curiosity * 18)
+            let noiseY3 = Foundation.cos(phase * 0.7 - element.sociability * 9) * Foundation.sin(phase * 2.9 + element.phaseOffset)
             
-            var flowY = (Foundation.cos(phase * freq1 * 0.88) * 0.35 +
-                        Foundation.cos(phase * freq2 * 1.12 + element.phaseOffset) * 0.28 +
-                        Foundation.cos(phase * freq3 * 0.76 + 1.7) * 0.22 +
-                        Foundation.cos(phase * freq4 * 1.25 + 0.9) * 0.15 +
-                        turbulence * 0.8) * flowScale
+            // レヴィフライト（突発的な大きな移動）
+            let levyFlight = Foundation.sin(phase * 0.3 + element.phaseOffset * 3.0)
+            let isJumping = levyFlight > 0.95  // 5%の確率で大ジャンプ
+            let jumpMultiplier = isJumping ? 5.0 : 1.0
             
-            // 各粒子が独自のランダムな動きパターンを持つ
-            if element.curiosity > 0.5 {
-                let randomWalk = Foundation.sin(phase * element.personality * 8.0) * 
-                               Foundation.cos(phase * element.curiosity * 6.0)
-                flowX += randomWalk * 0.001
-                flowY += randomWalk * 0.0008
+            // フラクタルノイズ（複数スケールの重ね合わせ）
+            var flowX = (noiseX1 * 0.4 + noiseX2 * 0.3 + noiseX3 * 0.3) * baseSpeed * personalityInfluence * jumpMultiplier
+            var flowY = (noiseY1 * 0.4 + noiseY2 * 0.3 + noiseY3 * 0.3) * baseSpeed * personalityInfluence * jumpMultiplier
+            
+            // 探索行動（好奇心が高い粒子はより遠くへ）
+            if element.curiosity > 0.6 {
+                let exploreAngle = phase * element.curiosity * 2.0 + element.phaseOffset
+                let exploreRadius = Foundation.sin(phase * 0.4 + element.curiosity * 5.0) * 0.002
+                flowX += Foundation.cos(exploreAngle) * exploreRadius * element.curiosity
+                flowY += Foundation.sin(exploreAngle) * exploreRadius * element.curiosity
+            }
+            
+            // 内向的な粒子は時々静止する
+            if element.personality < 0.3 {
+                let pauseProbability = Foundation.sin(phase * 0.8 + element.phaseOffset * 2.0)
+                if pauseProbability > 0.7 {
+                    flowX *= 0.1
+                    flowY *= 0.1
+                }
+            }
+            
+            // カオス的な突発的方向転換
+            let suddenTurn = Foundation.sin(phase * 5.7 + element.phaseOffset * 3.3) * 
+                           Foundation.cos(phase * 4.1 - element.phaseOffset * 2.1)
+            if suddenTurn > 0.9 {
+                let turnAngle = Double.random(in: 0...(2 * Double.pi))
+                let turnStrength = 0.003 * element.mood
+                flowX += Foundation.cos(turnAngle) * turnStrength
+                flowY += Foundation.sin(turnAngle) * turnStrength
             }
             
             // デバイス傾きによる重力効果（目に見える自然な影響）
