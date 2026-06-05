@@ -597,36 +597,42 @@ final class KaleidoscopeState {
             let phase = animationPhase + element.phaseOffset
             let energyBoost = 1.0 + element.energy * 1.5
             
-            // === 予測不可能な有機的な動き ===
+            // === 予測不可能な有機的な動き（円運動を排除） ===
             
             // 個性に基づく動きの多様性
-            let baseSpeed = 0.0015 * effectiveEnergy * energyBoost
-            let personalityInfluence = element.personality * 2.0 + 0.5  // 0.5-2.5の範囲
+            let baseSpeed = 0.003 * effectiveEnergy * energyBoost
+            let personalityInfluence = element.personality * 1.5 + 0.5
             
-            // パーリンノイズ風の複雑な動き
-            let noiseX1 = Foundation.sin(phase * 1.3 + element.phaseOffset) * Foundation.cos(phase * 0.7 + element.personality * 10)
-            let noiseX2 = Foundation.sin(phase * 2.1 - element.phaseOffset * 0.5) * Foundation.cos(phase * 1.9 + element.curiosity * 15)
-            let noiseX3 = Foundation.sin(phase * 0.5 + element.sociability * 8) * Foundation.cos(phase * 3.2 - element.phaseOffset)
+            // ランダムウォーク（ブラウン運動）- sin/cosを使わない
+            // 速度をランダムに微調整して予測不可能な動きを作る
+            let randomAngleChange = (Foundation.sin(phase * 13.7 + element.phaseOffset * 7.3) + 
+                                    Foundation.cos(phase * 17.3 - element.phaseOffset * 11.1)) * 0.5
             
-            let noiseY1 = Foundation.cos(phase * 1.5 - element.phaseOffset) * Foundation.sin(phase * 0.9 + element.personality * 12)
-            let noiseY2 = Foundation.cos(phase * 1.8 + element.phaseOffset * 0.7) * Foundation.sin(phase * 2.3 - element.curiosity * 18)
-            let noiseY3 = Foundation.cos(phase * 0.7 - element.sociability * 9) * Foundation.sin(phase * 2.9 + element.phaseOffset)
+            // 現在の速度方向を少しずつ変える（慣性を保ちつつランダムに曲がる）
+            let currentAngle = atan2(element.velocity.y, element.velocity.x)
+            let newAngle = currentAngle + randomAngleChange * 0.1  // 小さな角度変化
             
-            // レヴィフライト（突発的な大きな移動）
-            let levyFlight = Foundation.sin(phase * 0.3 + element.phaseOffset * 3.0)
-            let isJumping = levyFlight > 0.95  // 5%の確率で大ジャンプ
-            let jumpMultiplier = isJumping ? 5.0 : 1.0
+            // ランダムな強度変化
+            let speedVariation = 1.0 + Foundation.sin(phase * 7.1 + element.phaseOffset * 5.3) * 0.3
             
-            // フラクタルノイズ（複数スケールの重ね合わせ）
-            var flowX = (noiseX1 * 0.4 + noiseX2 * 0.3 + noiseX3 * 0.3) * baseSpeed * personalityInfluence * jumpMultiplier
-            var flowY = (noiseY1 * 0.4 + noiseY2 * 0.3 + noiseY3 * 0.3) * baseSpeed * personalityInfluence * jumpMultiplier
+            // 新しい方向へ加速（円運動にならない）
+            var flowX = Foundation.cos(newAngle) * baseSpeed * personalityInfluence * speedVariation
+            var flowY = Foundation.sin(newAngle) * baseSpeed * personalityInfluence * speedVariation
             
-            // 探索行動（好奇心が高い粒子はより遠くへ）
-            if element.curiosity > 0.6 {
-                let exploreAngle = phase * element.curiosity * 2.0 + element.phaseOffset
-                let exploreRadius = Foundation.sin(phase * 0.4 + element.curiosity * 5.0) * 0.002
-                flowX += Foundation.cos(exploreAngle) * exploreRadius * element.curiosity
-                flowY += Foundation.sin(exploreAngle) * exploreRadius * element.curiosity
+            // ランダムな衝動（突然の方向転換）
+            if Double.random(in: 0...1) < 0.02 {  // 2%の確率で
+                let impulseAngle = Double.random(in: 0...(2 * Double.pi))
+                let impulseStrength = Double.random(in: 0.002...0.006) * element.curiosity
+                flowX += Foundation.cos(impulseAngle) * impulseStrength
+                flowY += Foundation.sin(impulseAngle) * impulseStrength
+            }
+            
+            // 探索行動（ランダムな方向へ探索）
+            if element.curiosity > 0.6 && Double.random(in: 0...1) < 0.05 {
+                let exploreAngle = Double.random(in: 0...(2 * Double.pi))
+                let exploreStrength = 0.004 * element.curiosity
+                flowX += Foundation.cos(exploreAngle) * exploreStrength
+                flowY += Foundation.sin(exploreAngle) * exploreStrength
             }
             
             // 内向的な粒子は時々静止する

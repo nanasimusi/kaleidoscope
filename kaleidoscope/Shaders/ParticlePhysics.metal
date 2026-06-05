@@ -51,34 +51,43 @@ kernel void updateParticles(
     float dt = params.deltaTime;
     float phase = params.phase;
     
-    // === 予測不可能な有機的な動き ===
+    // === 予測不可能な有機的な動き（円運動を排除） ===
     
-    float baseSpeed = 0.0015 * params.kineticEnergy;
-    float personalityInfluence = particle.personality * 2.0 + 0.5;
+    float baseSpeed = 0.003 * params.kineticEnergy;
+    float personalityInfluence = particle.personality * 1.5 + 0.5;
     
-    // パーリンノイズ風の複雑な動き
-    float noiseX1 = sin(phase * 1.3 + particle.phaseOffset) * cos(phase * 0.7 + particle.personality * 10.0);
-    float noiseX2 = sin(phase * 2.1 - particle.phaseOffset * 0.5) * cos(phase * 1.9 + particle.curiosity * 15.0);
-    float noiseX3 = sin(phase * 0.5 + particle.sociability * 8.0) * cos(phase * 3.2 - particle.phaseOffset);
+    // ランダムウォーク（ブラウン運動）- sin/cosによる円運動を排除
+    float randomAngleChange = (sin(phase * 13.7 + particle.phaseOffset * 7.3) + 
+                               cos(phase * 17.3 - particle.phaseOffset * 11.1)) * 0.5;
     
-    float noiseY1 = cos(phase * 1.5 - particle.phaseOffset) * sin(phase * 0.9 + particle.personality * 12.0);
-    float noiseY2 = cos(phase * 1.8 + particle.phaseOffset * 0.7) * sin(phase * 2.3 - particle.curiosity * 18.0);
-    float noiseY3 = cos(phase * 0.7 - particle.sociability * 9.0) * sin(phase * 2.9 + particle.phaseOffset);
+    // 現在の速度方向を少しずつ変える（慣性を保ちつつランダムに曲がる）
+    float currentAngle = atan2(particle.velocity.y, particle.velocity.x);
+    float newAngle = currentAngle + randomAngleChange * 0.1;
     
-    // レヴィフライト（突発的な大きな移動）
-    float levyFlight = sin(phase * 0.3 + particle.phaseOffset * 3.0);
-    float jumpMultiplier = (levyFlight > 0.95) ? 5.0 : 1.0;
+    // ランダムな強度変化
+    float speedVariation = 1.0 + sin(phase * 7.1 + particle.phaseOffset * 5.3) * 0.3;
     
-    // フラクタルノイズ
-    float flowX = (noiseX1 * 0.4 + noiseX2 * 0.3 + noiseX3 * 0.3) * baseSpeed * personalityInfluence * jumpMultiplier;
-    float flowY = (noiseY1 * 0.4 + noiseY2 * 0.3 + noiseY3 * 0.3) * baseSpeed * personalityInfluence * jumpMultiplier;
+    // 新しい方向へ加速（円運動にならない）
+    float flowX = cos(newAngle) * baseSpeed * personalityInfluence * speedVariation;
+    float flowY = sin(newAngle) * baseSpeed * personalityInfluence * speedVariation;
     
-    // 探索行動
-    if (particle.curiosity > 0.6) {
-        float exploreAngle = phase * particle.curiosity * 2.0 + particle.phaseOffset;
-        float exploreRadius = sin(phase * 0.4 + particle.curiosity * 5.0) * 0.002;
-        flowX += cos(exploreAngle) * exploreRadius * particle.curiosity;
-        flowY += sin(exploreAngle) * exploreRadius * particle.curiosity;
+    // ランダムな衝動（突然の方向転換）
+    // Metal版ではランダム関数がないので疑似ランダムを使用
+    float randomImpulse = fract(sin(phase * 12.9898 + particle.phaseOffset * 78.233) * 43758.5453);
+    if (randomImpulse < 0.02) {  // 2%の確率
+        float impulseAngle = randomImpulse * 6.28318;  // 0 to 2*PI
+        float impulseStrength = (0.002 + randomImpulse * 0.004) * particle.curiosity;
+        flowX += cos(impulseAngle) * impulseStrength;
+        flowY += sin(impulseAngle) * impulseStrength;
+    }
+    
+    // 探索行動（ランダムな方向へ探索）
+    float randomExplore = fract(sin(phase * 23.1406 + particle.phaseOffset * 56.789) * 19134.4521);
+    if (particle.curiosity > 0.6 && randomExplore < 0.05) {
+        float exploreAngle = randomExplore * 6.28318;
+        float exploreStrength = 0.004 * particle.curiosity;
+        flowX += cos(exploreAngle) * exploreStrength;
+        flowY += sin(exploreAngle) * exploreStrength;
     }
     
     // 内向的な粒子の静止
