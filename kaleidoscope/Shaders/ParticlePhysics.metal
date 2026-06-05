@@ -92,13 +92,24 @@ kernel void updateParticles(
     flowX += params.touchOffsetX * offsetInfluence * particle.sociability;
     flowY += params.touchOffsetY * offsetInfluence * particle.sociability;
     
-    // 衝突反発力（軽量版：最大5個チェック）
+    // 衝突反発力 + Boids群れ行動（軽量版：最大5個チェック）
     float collisionForceX = 0.0;
     float collisionForceY = 0.0;
+    
+    // Boids用
+    float avgVelocityX = 0.0;
+    float avgVelocityY = 0.0;
+    float centerX = 0.0;
+    float centerY = 0.0;
+    float separationX = 0.0;
+    float separationY = 0.0;
+    uint nearbyCount = 0;
+    
     uint checkedCount = 0;
     const uint maxChecks = 5;
     const float collisionRadiusSq = 0.08 * 0.08;
     const float baseRepulsion = 0.4 * particle.sociability;
+    const float awarenessRadiusSq = 0.15 * 0.15 * particle.sociability;
     
     for (uint j = 0; j < params.particleCount && checkedCount < maxChecks; j++) {
         if (j == id) continue;
@@ -109,18 +120,88 @@ kernel void updateParticles(
         float distanceSq = dx * dx + dy * dy;
         
         if (distanceSq < collisionRadiusSq && distanceSq > 0.0001) {
+            // 衝突反発
             float distance = sqrt(distanceSq);
             float angle = atan2(dy, dx);
             
-            // ランダムな角度オフセットでカオス性を加える
             float randomAngle = sin(phase * float(id) + float(j)) * 0.3;
             angle += randomAngle;
             
             collisionForceX -= cos(angle) * baseRepulsion;
             collisionForceY -= sin(angle) * baseRepulsion;
             checkedCount++;
+            
+        } else if (distanceSq < awarenessRadiusSq && distanceSq > 0.001) {
+            // Boids群れ行動
+            nearbyCount++;
+            
+            // Alignment: 速度を集計
+            avgVelocityX += other.velocity.x;
+            avgVelocityY += other.velocity.y;
+            
+            // Cohesion: 位置を集計
+            centerX += other.position.x;
+            centerY += other.position.y;
+            
+            // Separation: 近すぎる場合の反発
+            if (distanceSq < 0.01) {
+                float separationStrength = (0.01 - distanceSq) * 10.0;
+                separationX -= dx * separationStrength;
+                separationY -= dy * separationStrength;
+            }
+            
+            checkedCount++;
         }
     }
+    
+    // Boids力を適用
+    if (nearbyCount > 0) {
+        // Alignment
+        avgVelocityX /= float(nearbyCount);
+        avgVelocityY /= float(nearbyCount);
+        float alignmentStrength = particle.sociability * 0.05;
+        flowX += (avgVelocityX - particle.velocity.x) * alignmentStrength;
+        flowY += (avgVelocityY - particle.velocity.y) * alignmentStrength;
+        
+        // Cohesion
+        centerX /= float(nearbyCount);
+        centerY /= float(nearbyCount);
+        float cohesionStrength = particle.sociability * 0.0003;
+        flowX += (centerX - particle.position.x) * cohesionStrength;
+        flowY += (centerY - particle.position.y) * cohesionStrength;
+        
+        // Separation
+        float separationStrength = particle.personality * 0.02;
+        flowX += separationX * separationStrength;
+        flowY += separationY * separationStrength;
+    }
+    
+    // 磁場のような力場
+    float touchCenterX = 0.5 + params.touchOffsetX * 0.1;
+    float touchCenterY = 0.5 + params.touchOffsetY * 0.1;
+    float toTouchX = touchCenterX - particle.position.x;
+    float toTouchY = touchCenterY - particle.position.y;
+    float distanceToTouch = length(float2(toTouchX, toTouchY));
+    
+    if (distanceToTouch > 0.01) {
+        // 渦巻き力
+        float vortexAngle = atan2(toTouchY, toTouchX) + 3.14159 / 2.0;
+        float vortexStrength = (1.0 / (distanceToTouch + 0.1)) * 0.0008 * particle.curiosity;
+        flowX += cos(vortexAngle) * vortexStrength;
+        flowY += sin(vortexAngle) * vortexStrength;
+        
+        // 引力/斥力
+        float magneticStrength = sin(phase * 0.5) * 0.0005;
+        flowX += toTouchX * magneticStrength;
+        flowY += toTouchY * magneticStrength;
+    }
+    
+    // 中心からの呼吸
+    float toCenterX = 0.5 - particle.position.x;
+    float toCenterY = 0.5 - particle.position.y;
+    float breathe = sin(phase * 0.3 + particle.phaseOffset) * 0.0002;
+    flowX += toCenterX * breathe;
+    flowY += toCenterY * breathe;
     
     // 速度更新
     particle.velocity.x += (flowX + collisionForceX) * dt * params.kineticEnergy;

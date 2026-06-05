@@ -75,6 +75,19 @@ struct SeedElement: Identifiable {
     var mood: Double = 0.5   // 0.0-1.0: 静か <-> 活発
     var awareness: Double = 0.0  // 周囲への気づき
     
+    // 群れ行動（Boids）用
+    var flockAlignment: Double = 0.0     // 周囲の粒子と同じ方向に進む
+    var flockCohesion: Double = 0.0      // 群れの中心に向かう
+    var flockSeparation: Double = 0.0    // 近すぎる粒子から離れる
+    
+    // 相互作用の履歴
+    var lastInteractionTime: Double = 0.0
+    var interactionCount: Int = 0
+    
+    // 軌跡（トレイル）用の位置履歴
+    var trail: [CGPoint] = []
+    let maxTrailLength = 8  // 軌跡の最大長
+    
     // Metal互換の便利プロパティ
     var x: Double {
         get { Double(position.x) }
@@ -609,6 +622,35 @@ final class KaleidoscopeState {
             flowX += smoothTilt.x * tiltStrength * energyBoost
             flowY += smoothTilt.y * tiltStrength * energyBoost
             
+            // === 磁場のような力場エフェクト ===
+            // タッチ位置を中心とした渦巻き磁場
+            let touchCenterX = 0.5 + smoothTouchOffset.x * 0.1
+            let touchCenterY = 0.5 + smoothTouchOffset.y * 0.1
+            let toTouchX = touchCenterX - element.position.x
+            let toTouchY = touchCenterY - element.position.y
+            let distanceToTouch = sqrt(toTouchX * toTouchX + toTouchY * toTouchY)
+            
+            if distanceToTouch > 0.01 {
+                // 渦巻き力（右回り）
+                let vortexAngle = atan2(toTouchY, toTouchX) + Double.pi / 2
+                let vortexStrength = (1.0 / (distanceToTouch + 0.1)) * 0.0008 * element.curiosity
+                flowX += Foundation.cos(vortexAngle) * vortexStrength
+                flowY += Foundation.sin(vortexAngle) * vortexStrength
+                
+                // 引力/斥力（タッチ時のエネルギーに応じて）
+                let magneticStrength = Foundation.sin(animationPhase * 0.5) * 0.0005
+                flowX += toTouchX * magneticStrength
+                flowY += toTouchY * magneticStrength
+            }
+            
+            // 画面中心からの放射状の力（呼吸するように）
+            let toCenterX = 0.5 - element.position.x
+            let toCenterY = 0.5 - element.position.y
+            let distanceFromCenter = sqrt(toCenterX * toCenterX + toCenterY * toCenterY)
+            let breathe = Foundation.sin(animationPhase * 0.3 + element.phaseOffset) * 0.0002
+            flowX += toCenterX * breathe
+            flowY += toCenterY * breathe
+            
             // === 生き物としての知性と感情に基づく動き ===
             
             // 気分の変化（ランダムウォーク）
@@ -622,6 +664,14 @@ final class KaleidoscopeState {
             var collisionForceX: Double = 0
             var collisionForceY: Double = 0
             let awarenessRadius = 0.15 * element.sociability
+            
+            // Boids群れ行動用
+            var avgVelocityX: Double = 0  // Alignment: 周囲の平均速度
+            var avgVelocityY: Double = 0
+            var centerOfMassX: Double = 0  // Cohesion: 群れの中心
+            var centerOfMassY: Double = 0
+            var separationX: Double = 0    // Separation: 近すぎる粒子から離れる
+            var separationY: Double = 0
             
             // 品質に応じた衝突検出
             var checkedCount = 0
@@ -674,9 +724,51 @@ final class KaleidoscopeState {
                         attractionX += Foundation.cos(phase * 3.0 + element.phaseOffset) * randomExplore
                         attractionY += Foundation.sin(phase * 3.0 + element.phaseOffset) * randomExplore
                     }
+                    
+                    // === Boids群れ行動の情報収集 ===
+                    // Alignment: 周囲の粒子の速度を集計
+                    avgVelocityX += other.velocity.x
+                    avgVelocityY += other.velocity.y
+                    
+                    // Cohesion: 群れの中心位置を計算
+                    centerOfMassX += other.position.x
+                    centerOfMassY += other.position.y
+                    
+                    // Separation: 近すぎる粒子からの反発
+                    if distanceSq < 0.01 {  // 非常に近い
+                        let separationStrength = (0.01 - distanceSq) * 10.0
+                        separationX -= dx * separationStrength
+                        separationY -= dy * separationStrength
+                    }
+                    
                     checkedCount += 1
                 }
                 }
+            }
+            
+            // === Boids群れ行動の力を計算 ===
+            if nearbyCount > 0 {
+                // Alignment: 周囲の平均速度に合わせる
+                avgVelocityX /= Double(nearbyCount)
+                avgVelocityY /= Double(nearbyCount)
+                let alignmentStrength = element.sociability * 0.05
+                element.flockAlignment = alignmentStrength
+                flowX += (avgVelocityX - element.velocity.x) * alignmentStrength
+                flowY += (avgVelocityY - element.velocity.y) * alignmentStrength
+                
+                // Cohesion: 群れの中心に向かう
+                centerOfMassX /= Double(nearbyCount)
+                centerOfMassY /= Double(nearbyCount)
+                let cohesionStrength = element.sociability * 0.0003
+                element.flockCohesion = cohesionStrength
+                flowX += (centerOfMassX - element.position.x) * cohesionStrength
+                flowY += (centerOfMassY - element.position.y) * cohesionStrength
+                
+                // Separation: 近すぎる粒子から離れる
+                let separationStrength = element.personality * 0.02  // 外向的な粒子はパーソナルスペース大
+                element.flockSeparation = separationStrength
+                flowX += separationX * separationStrength
+                flowY += separationY * separationStrength
             }
             
             // 衝突力を速度に追加
@@ -684,6 +776,12 @@ final class KaleidoscopeState {
             element.velocity.y += collisionForceY
             
             element.awareness = Double(nearbyCount) / 10.0
+            
+            // 相互作用の記録
+            if nearbyCount > 0 {
+                seedElements[i].lastInteractionTime = animationPhase
+                seedElements[i].interactionCount += nearbyCount
+            }
             
             // 個性に基づく速度調整
             let personalityFactor = 0.7 + element.personality * 0.6
@@ -710,6 +808,12 @@ final class KaleidoscopeState {
             
             let targetX = element.position.x + (element.velocity.x + flowX) * 20
             let targetY = element.position.y + (element.velocity.y + flowY) * 20
+            
+            // 位置更新前にトレイルを記録
+            seedElements[i].trail.append(element.position)
+            if seedElements[i].trail.count > element.maxTrailLength {
+                seedElements[i].trail.removeFirst()
+            }
             
             element.position.x = targetX + (element.position.x - targetX) * positionDecay
             element.position.y = targetY + (element.position.y - targetY) * positionDecay
