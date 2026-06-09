@@ -753,29 +753,17 @@ final class KaleidoscopeState {
                 }
             }
             
-            // === Boids群れ行動の力を計算 ===
+            // === Separationのみ（円運動を生むCohesionとAlignmentは無効化） ===
             if nearbyCount > 0 {
-                // Alignment: 周囲の平均速度に合わせる
-                avgVelocityX /= Double(nearbyCount)
-                avgVelocityY /= Double(nearbyCount)
-                let alignmentStrength = element.sociability * 0.05
-                element.flockAlignment = alignmentStrength
-                flowX += (avgVelocityX - element.velocity.x) * alignmentStrength
-                flowY += (avgVelocityY - element.velocity.y) * alignmentStrength
-                
-                // Cohesion: 群れの中心に向かう
-                centerOfMassX /= Double(nearbyCount)
-                centerOfMassY /= Double(nearbyCount)
-                let cohesionStrength = element.sociability * 0.0003
-                element.flockCohesion = cohesionStrength
-                flowX += (centerOfMassX - element.position.x) * cohesionStrength
-                flowY += (centerOfMassY - element.position.y) * cohesionStrength
-                
-                // Separation: 近すぎる粒子から離れる
-                let separationStrength = element.personality * 0.02  // 外向的な粒子はパーソナルスペース大
+                // Separation: 近すぎる粒子から離れる（これだけは円運動を生まない）
+                let separationStrength = element.personality * 0.03
                 element.flockSeparation = separationStrength
                 flowX += separationX * separationStrength
                 flowY += separationY * separationStrength
+                
+                // AlignmentとCohesionは削除（これらが定位置での円運動の原因）
+                element.flockAlignment = 0.0
+                element.flockCohesion = 0.0
             }
             
             // 衝突力を速度に追加

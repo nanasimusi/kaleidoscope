@@ -162,23 +162,10 @@ kernel void updateParticles(
     }
     
     // Boids力を適用
+    // === Separationのみ（円運動を生むCohesionとAlignmentは無効化） ===
     if (nearbyCount > 0) {
-        // Alignment
-        avgVelocityX /= float(nearbyCount);
-        avgVelocityY /= float(nearbyCount);
-        float alignmentStrength = particle.sociability * 0.05;
-        flowX += (avgVelocityX - particle.velocity.x) * alignmentStrength;
-        flowY += (avgVelocityY - particle.velocity.y) * alignmentStrength;
-        
-        // Cohesion
-        centerX /= float(nearbyCount);
-        centerY /= float(nearbyCount);
-        float cohesionStrength = particle.sociability * 0.0003;
-        flowX += (centerX - particle.position.x) * cohesionStrength;
-        flowY += (centerY - particle.position.y) * cohesionStrength;
-        
-        // Separation
-        float separationStrength = particle.personality * 0.02;
+        // Separation: 近すぎる粒子から離れる（これだけは円運動を生まない）
+        float separationStrength = particle.personality * 0.03;
         flowX += separationX * separationStrength;
         flowY += separationY * separationStrength;
     }
