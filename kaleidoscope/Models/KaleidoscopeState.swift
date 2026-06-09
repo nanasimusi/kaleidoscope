@@ -454,42 +454,13 @@ final class KaleidoscopeState {
             timeSinceLastPaletteChange = 0.0
         }
         
-        // 自動アルゴリズム切り替え - より長い間隔で
-        timeSinceLastAlgorithmChange += smoothDelta
-        if timeSinceLastAlgorithmChange >= algorithmChangeInterval {
-            // ランダムな新しいアルゴリズムに切り替え
-            let allAlgorithms = GenerationAlgorithm.allCases
-            let newAlgorithm = allAlgorithms.randomElement()!
-            
-            if newAlgorithm != currentGenerationAlgorithm {
-                currentGenerationAlgorithm = newAlgorithm
-                print("🎨 Generation algorithm morphing to: \(newAlgorithm.name)")
-                
-                // 新しいアルゴリズムでターゲット位置を生成
-                let newParticles = newAlgorithm.generate(
-                    count: seedElements.count,
-                    colors: currentPaletteColors
-                )
-                
-                // 各パーティクルにターゲット位置を設定してモーフィング開始
-                for i in seedElements.indices {
-                    seedElements[i].targetPosition = newParticles[i].position
-                    seedElements[i].morphProgress = 0.0
-                }
-                
-                // トランジション開始
-                algorithmTransitionProgress = 0.0
-            }
-            
-            // 次回の切り替え間隔もランダムに
-            algorithmChangeInterval = Double.random(in: 20...40)
-            timeSinceLastAlgorithmChange = 0.0
-        }
+        // 自動アルゴリズム切り替えを無効化
+        // 理由: 新しいアルゴリズム（フィボナッチ、同心円、曼荼羅など）は円形配置
+        // これらへのモーフィングがパーティクルを円運動させる原因
+        // 完全に自由な動きを維持するため、アルゴリズムはrandomで固定
         
-        // アルゴリズム遷移の進行
-        if algorithmTransitionProgress < 1.0 {
-            algorithmTransitionProgress = min(1.0, algorithmTransitionProgress + smoothDelta * 0.15)  // ゆっくり遷移
-        }
+        // timeSinceLastAlgorithmChange += smoothDelta
+        // 切り替えロジックは全てコメントアウト
         
         // 自動対称性変更 - ランダムな対称性で視覚的多様性
         timeSinceLastSymmetryChange += smoothDelta
@@ -813,27 +784,9 @@ final class KaleidoscopeState {
             element.position.x = targetX + (element.position.x - targetX) * positionDecay
             element.position.y = targetY + (element.position.y - targetY) * positionDecay
             
-            // アルゴリズム変更時のスムーズなモーフィング
-            if let morphTarget = element.targetPosition, element.morphProgress < 1.0 {
-                // モーフィング進行（ゆっくりと）
-                seedElements[i].morphProgress = min(1.0, element.morphProgress + smoothDelta * 0.2)
-                
-                // イージング関数（スムーズイン・アウト）
-                let t = element.morphProgress
-                let eased = t * t * (3.0 - 2.0 * t)  // Smoothstep
-                
-                // 現在位置からターゲット位置へ補間
-                let morphedX = element.position.x * (1.0 - eased) + morphTarget.x * eased
-                let morphedY = element.position.y * (1.0 - eased) + morphTarget.y * eased
-                
-                element.position.x = morphedX
-                element.position.y = morphedY
-                
-                // モーフィング完了時にターゲットをクリア
-                if seedElements[i].morphProgress >= 1.0 {
-                    seedElements[i].targetPosition = nil
-                }
-            }
+            // モーフィング処理を無効化
+            // 理由: 円形アルゴリズムへのモーフィングが円運動を生成
+            // targetPositionは使用しない
             
             // Parallax touch influence based on depth
             let depthFactor = 1.0 - element.depth * 0.6
