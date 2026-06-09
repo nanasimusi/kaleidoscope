@@ -416,22 +416,12 @@ final class KaleidoscopeState {
         smoothTilt.x = deviceTilt.x + (smoothTilt.x - deviceTilt.x) * tiltDecay
         smoothTilt.y = deviceTilt.y + (smoothTilt.y - deviceTilt.y) * tiltDecay
         
-        // Only evolve patterns when there's enough energy
-        if kineticEnergy > 0.3 {
-            timeSinceLastEvolution += smoothDelta * effectiveEnergy
-            if timeSinceLastEvolution >= evolutionInterval && !isTransitioning {
-                startEvolution()
-            }
-        }
+        // 進化システムを無効化
+        // 理由: 新しいランダム位置へのモーフィングが、予測不可能な移動を妨げる
+        // パーティクルは完全に自由に動くべき
         
-        if isTransitioning {
-            transitionProgress += smoothDelta * 0.2 * max(0.5, effectiveEnergy)
-            if transitionProgress >= 1.0 {
-                completeEvolution()
-            } else {
-                updateTransition()
-            }
-        }
+        // timeSinceLastEvolution += smoothDelta * effectiveEnergy
+        // Evolution system disabled
         
         if colorTransitionProgress < 1.0 {
             colorTransitionProgress = min(1.0, colorTransitionProgress + smoothDelta * 0.6)
