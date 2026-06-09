@@ -687,32 +687,10 @@ final class KaleidoscopeState {
                     
                     checkedCount += 1
                 } else if distanceSq < awarenessRadius * awarenessRadius && distanceSq > 0.001 {
-                    // 近くにいるが衝突していない - 通常の相互作用
-                    let distance = sqrt(distanceSq)
+                    // 近くにいるが衝突していない - Separationのみ（引力は円運動の原因なので削除）
                     nearbyCount += 1
                     
-                    // 社交的な粒子は他の粒子に惹かれる
-                    let attraction = element.sociability * 0.0008 / distance
-                    attractionX += dx * attraction
-                    attractionY += dy * attraction
-                    
-                    // 好奇心の強い粒子はランダムに探索（円運動にならないよう完全ランダム）
-                    if element.curiosity > 0.7 {
-                        let exploreStrength = element.curiosity * 0.0004
-                        attractionX += Double.random(in: -exploreStrength...exploreStrength)
-                        attractionY += Double.random(in: -exploreStrength...exploreStrength)
-                    }
-                    
-                    // === Boids群れ行動の情報収集 ===
-                    // Alignment: 周囲の粒子の速度を集計
-                    avgVelocityX += other.velocity.x
-                    avgVelocityY += other.velocity.y
-                    
-                    // Cohesion: 群れの中心位置を計算
-                    centerOfMassX += other.position.x
-                    centerOfMassY += other.position.y
-                    
-                    // Separation: 近すぎる粒子からの反発
+                    // Separation: 近すぎる粒子からの反発（これだけ残す）
                     if distanceSq < 0.01 {  // 非常に近い
                         let separationStrength = (0.01 - distanceSq) * 10.0
                         separationX -= dx * separationStrength
@@ -749,12 +727,8 @@ final class KaleidoscopeState {
                 seedElements[i].interactionCount += nearbyCount
             }
             
-            // 個性に基づく速度調整
-            let personalityFactor = 0.7 + element.personality * 0.6
-            let moodFactor = 0.5 + element.mood * 0.5
-            
-            flowX += attractionX * personalityFactor * moodFactor
-            flowY += attractionY * personalityFactor * moodFactor
+            // attractionX/Yは削除（他のパーティクルへの引力が円運動を生成）
+            // 完全に独立した動きのみ
             
             // 内向的な粒子は時々立ち止まる（完全ランダムなタイミング）
             if element.personality < 0.3 && Double.random(in: 0...1) < 0.05 {
