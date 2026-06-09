@@ -99,24 +99,16 @@ kernel void updateParticles(
     flowX += params.touchOffsetX * 0.15 * particle.sociability;
     flowY += params.touchOffsetY * 0.15 * particle.sociability;
     
-    // 衝突反発力 + Boids群れ行動（軽量版：最大5個チェック）
+    // 衝突反発のみ（引力・Boidsは全て削除）
     float collisionForceX = 0.0;
     float collisionForceY = 0.0;
-    
-    // Boids用
-    float avgVelocityX = 0.0;
-    float avgVelocityY = 0.0;
-    float centerX = 0.0;
-    float centerY = 0.0;
     float separationX = 0.0;
     float separationY = 0.0;
-    uint nearbyCount = 0;
     
     uint checkedCount = 0;
     const uint maxChecks = 5;
     const float collisionRadiusSq = 0.08 * 0.08;
     const float baseRepulsion = 0.4 * particle.sociability;
-    const float awarenessRadiusSq = 0.15 * 0.15 * particle.sociability;
     
     for (uint j = 0; j < params.particleCount && checkedCount < maxChecks; j++) {
         if (j == id) continue;
@@ -127,7 +119,7 @@ kernel void updateParticles(
         float distanceSq = dx * dx + dy * dy;
         
         if (distanceSq < collisionRadiusSq && distanceSq > 0.0001) {
-            // 衝突反発
+            // 衝突反発のみ
             float distance = sqrt(distanceSq);
             float angle = atan2(dy, dx);
             
@@ -138,55 +130,18 @@ kernel void updateParticles(
             collisionForceY -= sin(angle) * baseRepulsion;
             checkedCount++;
             
-        } else if (distanceSq < awarenessRadiusSq && distanceSq > 0.001) {
-            // Boids群れ行動
-            nearbyCount++;
-            
-            // Alignment: 速度を集計
-            avgVelocityX += other.velocity.x;
-            avgVelocityY += other.velocity.y;
-            
-            // Cohesion: 位置を集計
-            centerX += other.position.x;
-            centerY += other.position.y;
-            
-            // Separation: 近すぎる場合の反発
-            if (distanceSq < 0.01) {
-                float separationStrength = (0.01 - distanceSq) * 10.0;
-                separationX -= dx * separationStrength;
-                separationY -= dy * separationStrength;
-            }
-            
+        } else if (distanceSq < 0.01) {
+            // 近すぎる場合の追加反発
+            float separationStrength = (0.01 - distanceSq) * 10.0;
+            separationX -= dx * separationStrength;
+            separationY -= dy * separationStrength;
             checkedCount++;
         }
     }
     
-    // Boids力を適用
-    // === Separationのみ（円運動を生むCohesionとAlignmentは無効化） ===
-    if (nearbyCount > 0) {
-        // Separation: 近すぎる粒子から離れる（これだけは円運動を生まない）
-        float separationStrength = particle.personality * 0.03;
-        flowX += separationX * separationStrength;
-        flowY += separationY * separationStrength;
-    }
-    
-    // === 環境からの影響（弱く） ===
-    
-    // タッチ位置からの微弱な影響（引き寄せない、押し出さない、ただ少し影響を受ける程度）
-    if (particle.curiosity > 0.7) {
-        float touchCenterX = 0.5 + params.touchOffsetX * 0.1;
-        float touchCenterY = 0.5 + params.touchOffsetY * 0.1;
-        float toTouchX = touchCenterX - particle.position.x;
-        float toTouchY = touchCenterY - particle.position.y;
-        float distanceToTouch = length(float2(toTouchX, toTouchY));
-        
-        if (distanceToTouch > 0.2 && distanceToTouch < 0.5) {
-            // 非常に弱い引力（好奇心が高い個体のみ、遠い場合のみ）
-            float weakAttraction = 0.0001 * particle.curiosity;
-            flowX += toTouchX * weakAttraction;
-            flowY += toTouchY * weakAttraction;
-        }
-    }
+    // Separationを適用
+    flowX += separationX * particle.personality * 0.03;
+    flowY += separationY * particle.personality * 0.03;
     
     // 速度更新
     particle.velocity.x += (flowX + collisionForceX) * dt * params.kineticEnergy;
