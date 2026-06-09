@@ -599,50 +599,37 @@ final class KaleidoscopeState {
             
             // === 完全に自由な生物的動き ===
             
-            // 基本となる慣性の力（現在の速度を維持しようとする）
-            var flowX = element.velocity.x * 0.5
-            var flowY = element.velocity.y * 0.5
+            // 強い慣性（魚や鳥のように滑らかに泳ぐ・飛ぶ）
+            var flowX = element.velocity.x * 0.95
+            var flowY = element.velocity.y * 0.95
             
-            // ランダムな力を常に加える（ブラウン運動）
-            let randomForceX = Double.random(in: -0.001...0.001) * element.personality
-            let randomForceY = Double.random(in: -0.001...0.001) * element.personality
-            flowX += randomForceX
-            flowY += randomForceY
+            // 各個体が独立してランダムに加速（全員バラバラに動く）
+            let randomAccelX = Double.random(in: -0.008...0.008) * (element.personality + 0.3)
+            let randomAccelY = Double.random(in: -0.008...0.008) * (element.personality + 0.3)
+            flowX += randomAccelX
+            flowY += randomAccelY
             
-            // 好奇心が高い個体はより活発に動く
-            if element.curiosity > 0.5 {
-                let activeForceX = Double.random(in: -0.002...0.002) * element.curiosity
-                let activeForceY = Double.random(in: -0.002...0.002) * element.curiosity
-                flowX += activeForceX
-                flowY += activeForceY
+            // 好奇心が高い個体は大胆に動く
+            if element.curiosity > 0.6 {
+                let boldMoveX = Double.random(in: -0.012...0.012) * element.curiosity
+                let boldMoveY = Double.random(in: -0.012...0.012) * element.curiosity
+                flowX += boldMoveX
+                flowY += boldMoveY
             }
             
-            // 時々大きく方向転換（魚が急に向きを変えるような動き）
-            if Double.random(in: 0...1) < 0.01 {
-                let turnX = Double.random(in: -0.01...0.01)
-                let turnY = Double.random(in: -0.01...0.01)
-                flowX += turnX
-                flowY += turnY
+            // 各個体が独自のタイミングでランダムに急加速
+            let randomTiming = Double.random(in: 0...1)
+            if randomTiming < 0.03 {  // 3%の確率（各個体バラバラ）
+                let burstX = Double.random(in: -0.025...0.025)
+                let burstY = Double.random(in: -0.025...0.025)
+                flowX += burstX
+                flowY += burstY
             }
             
-            // 内向的な粒子は時々静止する
-            if element.personality < 0.3 {
-                let pauseProbability = Foundation.sin(phase * 0.8 + element.phaseOffset * 2.0)
-                if pauseProbability > 0.7 {
-                    flowX *= 0.1
-                    flowY *= 0.1
-                }
-            }
-            
-            // カオス的な突発的方向転換
-            let suddenTurn = Foundation.sin(phase * 5.7 + element.phaseOffset * 3.3) * 
-                           Foundation.cos(phase * 4.1 - element.phaseOffset * 2.1)
-            if suddenTurn > 0.9 {
-                let turnAngle = Double.random(in: 0...(2 * Double.pi))
-                let turnStrength = 0.003 * element.mood
-                flowX += Foundation.cos(turnAngle) * turnStrength
-                flowY += Foundation.sin(turnAngle) * turnStrength
-            }
+            // 社交的な個体は活発に、内向的な個体は穏やか（でも止まらない）
+            let socialityFactor = 0.5 + element.sociability * 0.8
+            flowX *= socialityFactor
+            flowY *= socialityFactor
             
             // デバイス傾きによる重力効果（目に見える自然な影響）
             // 深度によって傾きへの反応性を変える（奥のものほど遅く動く）

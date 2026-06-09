@@ -53,48 +53,43 @@ kernel void updateParticles(
     
     // === 完全に自由な生物的動き ===
     
-    // 基本となる慣性の力（現在の速度を維持しようとする）
-    float flowX = particle.velocity.x * 0.5;
-    float flowY = particle.velocity.y * 0.5;
+    // 強い慣性（魚や鳥のように滑らかに泳ぐ・飛ぶ）
+    float flowX = particle.velocity.x * 0.95;
+    float flowY = particle.velocity.y * 0.95;
     
-    // ランダムな力を常に加える（ブラウン運動）
-    // Metal版では疑似ランダムを使用
+    // 各個体が独立してランダムに加速（全員バラバラに動く）
     float rand1 = fract(sin(phase * 12.9898 + particle.phaseOffset * 78.233) * 43758.5453);
     float rand2 = fract(sin(phase * 93.9898 + particle.phaseOffset * 47.593) * 21983.1253);
-    float randomForceX = (rand1 - 0.5) * 0.002 * particle.personality;
-    float randomForceY = (rand2 - 0.5) * 0.002 * particle.personality;
-    flowX += randomForceX;
-    flowY += randomForceY;
+    float randomAccelX = (rand1 - 0.5) * 0.016 * (particle.personality + 0.3);
+    float randomAccelY = (rand2 - 0.5) * 0.016 * (particle.personality + 0.3);
+    flowX += randomAccelX;
+    flowY += randomAccelY;
     
-    // 好奇心が高い個体はより活発に動く
-    if (particle.curiosity > 0.5) {
+    // 好奇心が高い個体は大胆に動く
+    if (particle.curiosity > 0.6) {
         float rand3 = fract(sin(phase * 45.1234 + particle.phaseOffset * 23.456) * 31456.7890);
         float rand4 = fract(sin(phase * 67.8901 + particle.phaseOffset * 34.567) * 54321.9876);
-        float activeForceX = (rand3 - 0.5) * 0.004 * particle.curiosity;
-        float activeForceY = (rand4 - 0.5) * 0.004 * particle.curiosity;
-        flowX += activeForceX;
-        flowY += activeForceY;
+        float boldMoveX = (rand3 - 0.5) * 0.024 * particle.curiosity;
+        float boldMoveY = (rand4 - 0.5) * 0.024 * particle.curiosity;
+        flowX += boldMoveX;
+        flowY += boldMoveY;
     }
     
-    // 時々大きく方向転換（魚が急に向きを変えるような動き）
-    float randTurn = fract(sin(phase * 78.4561 + particle.phaseOffset * 91.234) * 65432.1098);
-    if (randTurn < 0.01) {
+    // 各個体が独自のタイミングでランダムに急加速
+    float randTiming = fract(sin(phase * 78.4561 + particle.phaseOffset * 91.234) * 65432.1098);
+    if (randTiming < 0.03) {  // 3%の確率（各個体バラバラ）
         float rand5 = fract(sin(phase * 34.5678 + particle.phaseOffset * 12.345) * 87654.3210);
         float rand6 = fract(sin(phase * 56.7890 + particle.phaseOffset * 89.012) * 98765.4321);
-        float turnX = (rand5 - 0.5) * 0.02;
-        float turnY = (rand6 - 0.5) * 0.02;
-        flowX += turnX;
-        flowY += turnY;
+        float burstX = (rand5 - 0.5) * 0.05;
+        float burstY = (rand6 - 0.5) * 0.05;
+        flowX += burstX;
+        flowY += burstY;
     }
     
-    // 内向的な粒子の静止
-    if (particle.personality < 0.3) {
-        float pauseProbability = sin(phase * 0.8 + particle.phaseOffset * 2.0);
-        if (pauseProbability > 0.7) {
-            flowX *= 0.1;
-            flowY *= 0.1;
-        }
-    }
+    // 社交的な個体は活発に、内向的な個体は穏やか（でも止まらない）
+    float socialityFactor = 0.5 + particle.sociability * 0.8;
+    flowX *= socialityFactor;
+    flowY *= socialityFactor;
     
     // デバイス傾きによる重力
     flowX += params.tiltX * 0.025 * params.kineticEnergy;
