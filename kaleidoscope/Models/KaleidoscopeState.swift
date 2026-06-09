@@ -725,11 +725,11 @@ final class KaleidoscopeState {
                     attractionX += dx * attraction
                     attractionY += dy * attraction
                     
-                    // 好奇心の強い粒子はランダムに探索
+                    // 好奇心の強い粒子はランダムに探索（円運動にならないよう完全ランダム）
                     if element.curiosity > 0.7 {
-                        let randomExplore = element.curiosity * 0.0002
-                        attractionX += Foundation.cos(phase * 3.0 + element.phaseOffset) * randomExplore
-                        attractionY += Foundation.sin(phase * 3.0 + element.phaseOffset) * randomExplore
+                        let exploreStrength = element.curiosity * 0.0004
+                        attractionX += Double.random(in: -exploreStrength...exploreStrength)
+                        attractionY += Double.random(in: -exploreStrength...exploreStrength)
                     }
                     
                     // === Boids群れ行動の情報収集 ===
@@ -797,10 +797,10 @@ final class KaleidoscopeState {
             flowX += attractionX * personalityFactor * moodFactor
             flowY += attractionY * personalityFactor * moodFactor
             
-            // 内向的な粒子は時々立ち止まる
-            if element.personality < 0.3 && Foundation.sin(phase * 2.0 + element.phaseOffset) > 0.9 {
-                flowX *= 0.1
-                flowY *= 0.1
+            // 内向的な粒子は時々立ち止まる（完全ランダムなタイミング）
+            if element.personality < 0.3 && Double.random(in: 0...1) < 0.05 {
+                flowX *= 0.2
+                flowY *= 0.2
             }
             
             // より滑らかで自然な速度減衰（生物の動きのように）
@@ -881,15 +881,14 @@ final class KaleidoscopeState {
             let rotationDecay = exp(-1.4 * smoothDelta)
             element.rotationSpeed *= rotationDecay
             
-            // 複数の周波数を組み合わせた自然な回転変動（個性を反映）
+            // ランダムな回転変動（個性を反映）
             let rotationIntensity = 0.5 + element.mood * 0.5 + element.personality * 0.3
-            var baseRotation = (Foundation.sin(phase * 0.28 + element.phaseOffset) * 0.42 +
-                               Foundation.cos(phase * 0.17 + element.phaseOffset * 1.3) * 0.28 +
-                               Foundation.sin(phase * 0.35 + element.phaseOffset * 0.7) * 0.18) * rotationIntensity
+            let randomRotation = Double.random(in: -0.3...0.3) * rotationIntensity
+            var baseRotation = randomRotation
             
             // 好奇心の強い粒子はより活発に回転
             if element.curiosity > 0.6 {
-                baseRotation += Foundation.sin(phase * 1.5 + element.phaseOffset) * 0.15 * element.curiosity
+                baseRotation += Double.random(in: -0.2...0.2) * element.curiosity
             }
             
             // 傾きによる回転への影響（左右の傾きで回転速度が変化）
