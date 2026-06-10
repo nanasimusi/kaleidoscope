@@ -88,6 +88,13 @@ struct SeedElement: Identifiable {
     var trail: [CGPoint] = []
     let maxTrailLength = 8  // 軌跡の最大長
     
+    // 生命体としての独立した行動
+    var goalPosition: CGPoint?  // 現在の目的地
+    var timeUntilNewGoal: Double = 0.0  // 新しい目的地を探すまでの時間
+    var wanderAngle: Double = 0.0  // さまよう方向
+    var isResting: Bool = false  // 休憩中かどうか
+    var restTime: Double = 0.0  // 休憩時間
+    
     // Metal互換の便利プロパティ
     var x: Double {
         get { Double(position.x) }
@@ -555,42 +562,96 @@ final class KaleidoscopeState {
             element.energy *= energyDecay
             if element.energy < 0.001 { element.energy = 0 }
             
-            let phase = animationPhase + element.phaseOffset
-            let energyBoost = 1.0 + element.energy * 1.5
+            // === 生命体としての独立した行動システム ===
             
-            // === 完全に自由な生物的動き ===
+            let currentTime = animationPhase
+            var flowX: Double = 0.0
+            var flowY: Double = 0.0
             
-            // 強い慣性（魚や鳥のように滑らかに泳ぐ・飛ぶ）
-            var flowX = element.velocity.x * 0.95
-            var flowY = element.velocity.y * 0.95
-            
-            // 各個体が独立してランダムに加速（全員バラバラに動く）
-            let randomAccelX = Double.random(in: -0.008...0.008) * (element.personality + 0.3)
-            let randomAccelY = Double.random(in: -0.008...0.008) * (element.personality + 0.3)
-            flowX += randomAccelX
-            flowY += randomAccelY
-            
-            // 好奇心が高い個体は大胆に動く
-            if element.curiosity > 0.6 {
-                let boldMoveX = Double.random(in: -0.012...0.012) * element.curiosity
-                let boldMoveY = Double.random(in: -0.012...0.012) * element.curiosity
-                flowX += boldMoveX
-                flowY += boldMoveY
+            // 1. 休憩中かチェック
+            if element.isResting {
+                element.restTime -= smoothDelta
+                if element.restTime <= 0 {
+                    seedElements[i].isResting = false
+                    seedElements[i].goalPosition = nil
+                }
+                // 休憩中は微動だにしない（または微小な揺らぎのみ）
+                let tremor = 0.0001 * element.personality
+                flowX = Double.random(in: -tremor...tremor)
+                flowY = Double.random(in: -tremor...tremor)
+            } else {
+                // 2. 目的地がない、または目的地に到達したら新しい目的地を設定
+                if element.goalPosition == nil || element.timeUntilNewGoal <= 0 {
+                    // 性格によって行動が変わる
+                    if element.curiosity > 0.7 {
+                        // 好奇心旺盛: 遠くの場所を目指す
+                        let angle = Double.random(in: 0...(2 * .pi))
+                        let distance = Double.random(in: 0.3...0.8)
+                        seedElements[i].goalPosition = CGPoint(
+                            x: 0.5 + cos(angle) * distance,
+                            y: 0.5 + sin(angle) * distance
+                        )
+                    } else if element.personality > 0.6 {
+                        // 外向的: 画面の端近くを目指す
+                        let edge = Int.random(in: 0...3)
+                        switch edge {
+                        case 0: seedElements[i].goalPosition = CGPoint(x: Double.random(in: 0.1...0.9), y: 0.1)
+                        case 1: seedElements[i].goalPosition = CGPoint(x: 0.9, y: Double.random(in: 0.1...0.9))
+                        case 2: seedElements[i].goalPosition = CGPoint(x: Double.random(in: 0.1...0.9), y: 0.9)
+                        default: seedElements[i].goalPosition = CGPoint(x: 0.1, y: Double.random(in: 0.1...0.9))
+                        }
+                    } else {
+                        // 内向的: 画面中央付近を目指す
+                        seedElements[i].goalPosition = CGPoint(
+                            x: Double.random(in: 0.3...0.7),
+                            y: Double.random(in: 0.3...0.7)
+                        )
+                    }
+                    
+                    // 次の目的地変更までの時間（性格によって変わる）
+                    let changeInterval = (1.0 - element.curiosity) * 5.0 + 2.0
+                    seedElements[i].timeUntilNewGoal = changeInterval
+                    
+                    // さまよう角度を更新
+                    seedElements[i].wanderAngle = Double.random(in: 0...(2 * .pi))
+                }
+                
+                // 3. 目的地に向かって移動
+                if let goal = element.goalPosition {
+                    let toGoalX = goal.x - element.position.x
+                    let toGoalY = goal.y - element.position.y
+                    let distanceToGoal = sqrt(toGoalX * toGoalX + toGoalY * toGoalY)
+                    
+                    if distanceToGoal < 0.05 {
+                        // 目的地に到達: 休憩するかすぐ次に向かうか
+                        if element.mood < 0.3 {
+                            // 疲れている: 休憩
+                            seedElements[i].isResting = true
+                            seedElements[i].restTime = Double.random(in: 0.5...2.0)
+                        }
+                        seedElements[i].goalPosition = nil
+                        seedElements[i].timeUntilNewGoal = 0
+                    } else {
+                        // 目的地に向かう力（まっすぐではなく、少し揺らぐ）
+                        let dirX = toGoalX / distanceToGoal
+                        let dirY = toGoalY / distanceToGoal
+                        
+                        // さまよい成分（Wandering Behavior）
+                        element.wanderAngle += Double.random(in: -0.5...0.5) * element.personality
+                        let wanderStrength = 0.3 * (1.0 - element.mood)
+                        let wanderX = cos(element.wanderAngle) * wanderStrength
+                        let wanderY = sin(element.wanderAngle) * wanderStrength
+                        
+                        // 合成（目的地への力 + さまよい）
+                        let seekStrength = 0.005 * (0.5 + element.mood * 0.5)
+                        flowX = dirX * seekStrength + wanderX * 0.001
+                        flowY = dirY * seekStrength + wanderY * 0.001
+                        
+                        // 時間を減らす
+                        seedElements[i].timeUntilNewGoal -= smoothDelta
+                    }
+                }
             }
-            
-            // 各個体が独自のタイミングでランダムに急加速
-            let randomTiming = Double.random(in: 0...1)
-            if randomTiming < 0.03 {  // 3%の確率（各個体バラバラ）
-                let burstX = Double.random(in: -0.025...0.025)
-                let burstY = Double.random(in: -0.025...0.025)
-                flowX += burstX
-                flowY += burstY
-            }
-            
-            // 社交的な個体は活発に、内向的な個体は穏やか（でも止まらない）
-            let socialityFactor = 0.5 + element.sociability * 0.8
-            flowX *= socialityFactor
-            flowY *= socialityFactor
             
             // デバイス傾きによる重力効果（目に見える自然な影響）
             // 深度によって傾きへの反応性を変える（奥のものほど遅く動く）
@@ -598,8 +659,8 @@ final class KaleidoscopeState {
             let tiltStrength = 0.025 * tiltResponsiveness  // より明確な影響
             
             // 傾きに基づく重力的な力を加える（重力のように働く）
-            flowX += smoothTilt.x * tiltStrength * energyBoost
-            flowY += smoothTilt.y * tiltStrength * energyBoost
+            flowX += smoothTilt.x * tiltStrength
+            flowY += smoothTilt.y * tiltStrength
             
             // === 環境からの影響（弱く） ===
             

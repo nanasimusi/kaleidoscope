@@ -11,6 +11,11 @@ struct Particle {
     float sociability;
     float depth;
     float phaseOffset;
+    float2 goalPosition;
+    float timeUntilNewGoal;
+    float wanderAngle;
+    bool isResting;
+    float restTime;
 };
 
 struct SimulationParams {
@@ -51,45 +56,90 @@ kernel void updateParticles(
     float dt = params.deltaTime;
     float phase = params.phase;
     
-    // === 完全に自由な生物的動き ===
+    // === 生命体としての独立した行動システム ===
     
-    // 強い慣性（魚や鳥のように滑らかに泳ぐ・飛ぶ）
-    float flowX = particle.velocity.x * 0.95;
-    float flowY = particle.velocity.y * 0.95;
+    float flowX = 0.0;
+    float flowY = 0.0;
     
-    // 各個体が独立してランダムに加速（全員バラバラに動く）
-    float rand1 = fract(sin(phase * 12.9898 + particle.phaseOffset * 78.233) * 43758.5453);
-    float rand2 = fract(sin(phase * 93.9898 + particle.phaseOffset * 47.593) * 21983.1253);
-    float randomAccelX = (rand1 - 0.5) * 0.016 * (particle.personality + 0.3);
-    float randomAccelY = (rand2 - 0.5) * 0.016 * (particle.personality + 0.3);
-    flowX += randomAccelX;
-    flowY += randomAccelY;
-    
-    // 好奇心が高い個体は大胆に動く
-    if (particle.curiosity > 0.6) {
-        float rand3 = fract(sin(phase * 45.1234 + particle.phaseOffset * 23.456) * 31456.7890);
-        float rand4 = fract(sin(phase * 67.8901 + particle.phaseOffset * 34.567) * 54321.9876);
-        float boldMoveX = (rand3 - 0.5) * 0.024 * particle.curiosity;
-        float boldMoveY = (rand4 - 0.5) * 0.024 * particle.curiosity;
-        flowX += boldMoveX;
-        flowY += boldMoveY;
+    // 1. 休憩中かチェック
+    if (particle.isResting) {
+        particle.restTime -= dt;
+        if (particle.restTime <= 0) {
+            particle.isResting = false;
+            particle.timeUntilNewGoal = 0;
+        }
+        // 休憩中は微小な揺らぎのみ
+        float tremor = 0.0001 * particle.personality;
+        flowX = (sin(phase * particle.phaseOffset * 10.0) - 0.5) * tremor;
+        flowY = (cos(phase * particle.phaseOffset * 10.0) - 0.5) * tremor;
+    } else {
+        // 2. 目的地がないまたは時間切れなら新しい目的地を設定
+        if (particle.timeUntilNewGoal <= 0) {
+            // 好奇心旺盛: 遠くを目指す
+            if (particle.curiosity > 0.7) {
+                float angle = particle.phaseOffset * 6.28318; // 0-2π
+                float distance = 0.5 + particle.curiosity * 0.3;
+                particle.goalPosition = float2(
+                    0.5 + cos(angle) * distance,
+                    0.5 + sin(angle) * distance
+                );
+            } 
+            // 外向的: 端を目指す
+            else if (particle.personality > 0.6) {
+                float edge = fmod(particle.phaseOffset * 4.0, 4.0);
+                if (edge < 1.0) {
+                    particle.goalPosition = float2(particle.personality, 0.1);
+                } else if (edge < 2.0) {
+                    particle.goalPosition = float2(0.9, particle.personality);
+                } else if (edge < 3.0) {
+                    particle.goalPosition = float2(particle.personality, 0.9);
+                } else {
+                    particle.goalPosition = float2(0.1, particle.personality);
+                }
+            }
+            // 内向的: 中央付近を目指す
+            else {
+                particle.goalPosition = float2(
+                    0.4 + particle.personality * 0.3,
+                    0.4 + particle.sociability * 0.3
+                );
+            }
+            
+            particle.timeUntilNewGoal = (1.0 - particle.curiosity) * 5.0 + 2.0;
+            particle.wanderAngle = particle.phaseOffset * 6.28318;
+        }
+        
+        // 3. 目的地に向かって移動
+        float2 toGoal = particle.goalPosition - particle.position;
+        float distanceToGoal = length(toGoal);
+        
+        if (distanceToGoal < 0.05) {
+            // 到達: 休憩するか次へ
+            if (particle.sociability < 0.3) {
+                particle.isResting = true;
+                particle.restTime = 1.0 + particle.personality;
+            }
+            particle.timeUntilNewGoal = 0;
+        } else {
+            // 目的地へ向かう
+            float2 direction = toGoal / distanceToGoal;
+            
+            // さまよい成分
+            particle.wanderAngle += (sin(phase * particle.personality * 10.0) - 0.5) * particle.personality;
+            float wanderStrength = 0.3 * (1.0 - particle.sociability);
+            float2 wander = float2(
+                cos(particle.wanderAngle) * wanderStrength,
+                sin(particle.wanderAngle) * wanderStrength
+            );
+            
+            // 合成
+            float seekStrength = 0.005 * (0.5 + particle.curiosity * 0.5);
+            flowX = direction.x * seekStrength + wander.x * 0.001;
+            flowY = direction.y * seekStrength + wander.y * 0.001;
+            
+            particle.timeUntilNewGoal -= dt;
+        }
     }
-    
-    // 各個体が独自のタイミングでランダムに急加速
-    float randTiming = fract(sin(phase * 78.4561 + particle.phaseOffset * 91.234) * 65432.1098);
-    if (randTiming < 0.03) {  // 3%の確率（各個体バラバラ）
-        float rand5 = fract(sin(phase * 34.5678 + particle.phaseOffset * 12.345) * 87654.3210);
-        float rand6 = fract(sin(phase * 56.7890 + particle.phaseOffset * 89.012) * 98765.4321);
-        float burstX = (rand5 - 0.5) * 0.05;
-        float burstY = (rand6 - 0.5) * 0.05;
-        flowX += burstX;
-        flowY += burstY;
-    }
-    
-    // 社交的な個体は活発に、内向的な個体は穏やか（でも止まらない）
-    float socialityFactor = 0.5 + particle.sociability * 0.8;
-    flowX *= socialityFactor;
-    flowY *= socialityFactor;
     
     // デバイス傾きによる重力
     flowX += params.tiltX * 0.025 * params.kineticEnergy;

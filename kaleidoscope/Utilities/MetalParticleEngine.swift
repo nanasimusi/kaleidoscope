@@ -13,6 +13,11 @@ struct MetalParticle {
     var sociability: Float
     var depth: Float
     var phaseOffset: Float
+    var goalPosition: SIMD2<Float>
+    var timeUntilNewGoal: Float
+    var wanderAngle: Float
+    var isResting: Bool
+    var restTime: Float
 }
 
 // Metal側のSimulationParams構造体と対応
@@ -108,7 +113,15 @@ class MetalParticleEngine {
                 curiosity: Float(element.curiosity),
                 sociability: Float(element.sociability),
                 depth: Float(element.depth),
-                phaseOffset: Float(element.phaseOffset)
+                phaseOffset: Float(element.phaseOffset),
+                goalPosition: SIMD2<Float>(
+                    Float(element.goalPosition?.x ?? 0.5),
+                    Float(element.goalPosition?.y ?? 0.5)
+                ),
+                timeUntilNewGoal: Float(element.timeUntilNewGoal),
+                wanderAngle: Float(element.wanderAngle),
+                isResting: element.isResting,
+                restTime: Float(element.restTime)
             )
         }
     }
@@ -129,6 +142,14 @@ class MetalParticleEngine {
             elements[index].vx = Double(metalParticle.velocity.x)
             elements[index].vy = Double(metalParticle.velocity.y)
             elements[index].rotation = Angle(radians: Double(metalParticle.rotation))
+            elements[index].goalPosition = CGPoint(
+                x: Double(metalParticle.goalPosition.x),
+                y: Double(metalParticle.goalPosition.y)
+            )
+            elements[index].timeUntilNewGoal = Double(metalParticle.timeUntilNewGoal)
+            elements[index].wanderAngle = Double(metalParticle.wanderAngle)
+            elements[index].isResting = metalParticle.isResting
+            elements[index].restTime = Double(metalParticle.restTime)
         }
     }
     
