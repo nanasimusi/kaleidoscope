@@ -88,6 +88,21 @@ struct SeedElement: Identifiable {
     var trail: [CGPoint] = []
     let maxTrailLength = 8  // 軌跡の最大長
     
+    // 蛍の同期発光（Kuramoto振動子）
+    var pulsePhase: Double = 0       // GPUが結合更新し、毎フレーム読み戻す
+    var pulseFreq: Double = 1.0      // 固有周波数 [rad/s]、スポーン時に決定
+
+    // 生きた色彩: HSBベース成分（colorが変わるたびに再抽出）
+    var hueBase: Double = 0
+    var satBase: Double = 0.7
+    var briBase: Double = 0.9
+    var alphaBase: Double = 1.0
+
+    // フレーム毎プリコンピュート（evolve()で計算、描画側は読むだけ）
+    var displayColor: Color = .white
+    var swellBoost: Double = 0   // 鼓動波によるサイズ膨張 0...~0.16
+    var glowBoost: Double = 0    // パルス+鼓動波+エネルギーの複合グロー 0...1
+
     // 生命体としての独立した行動
     var goalPosition: CGPoint?  // 現在の目的地
     var timeUntilNewGoal: Double = 0.0  // 新しい目的地を探すまでの時間
@@ -194,7 +209,7 @@ struct SeedElement: Identifiable {
         // 極端な個性を持つ粒子を時々生成（予測不可能性）
         let isExtreme = Double.random(in: 0...1) > 0.85
         
-        return SeedElement(
+        var element = SeedElement(
             position: CGPoint(
                 x: CGFloat.random(in: 0.02...0.98),
                 y: CGFloat.random(in: 0.02...0.98)
@@ -217,6 +232,18 @@ struct SeedElement: Identifiable {
             sociability: sociability,
             mood: Double.random(in: 0.2...0.8)
         )
+
+        // 群れ行動の重み（個体ごとの傾向）
+        element.flockAlignment = Double.random(in: 0.4...1.0)
+        element.flockCohesion = Double.random(in: 0.3...1.0)
+        element.flockSeparation = Double.random(in: 0.7...1.0)
+
+        // 蛍の発光リズム: 周期4.5〜9秒の分散が部分同期（揃いかけては崩れる）の鍵
+        element.pulsePhase = Double.random(in: 0...(2 * Double.pi))
+        element.pulseFreq = 2 * Double.pi / Double.random(in: 4.5...9.0)
+
+        element.displayColor = element.color
+        return element
     }
 }
 
@@ -269,6 +296,11 @@ final class KaleidoscopeState {
     // 自動パレット切り替え
     var timeSinceLastPaletteChange: Double = 0.0
     var paletteChangeInterval: Double = Double.random(in: 8...15)  // ランダムな間隔で切り替え
+
+    // 鼓動: 中心から広がる柔らかな放射波
+    var heartbeatAge: Double = 999.0  // 直近の鼓動からの経過秒（大きい = 非活性）
+    var timeSinceLastHeartbeat: Double = 0.0
+    var heartbeatInterval: Double = Double.random(in: 10...20)
     
     // 生成アルゴリズムの自動切り替え
     var currentGenerationAlgorithm: GenerationAlgorithm = .random
@@ -293,13 +325,9 @@ final class KaleidoscopeState {
     private var lastQuality: QualityLevel = .medium
     
     init() {
-        // ランダムなパレットで開始
-        let randomPalette = ColorPalette.allCases.randomElement()!
-        targetPaletteColors = randomPalette.colors
-        currentPaletteColors = randomPalette.colors
-        randomize(with: randomPalette.colors)
-        
-        // Metal engineを初期化
+        // Metal engineを最初に初期化
+        // 重要: randomize()より前に行わないと、初回のparticleBufferが作られず
+        // シェイクで再生成されるまでGPU物理演算が無効のままになる
         if let engine = MetalParticleEngine() {
             metalEngine = engine
             useMetal = true
@@ -307,6 +335,12 @@ final class KaleidoscopeState {
         } else {
             print("⚠️ Metal not available, using CPU fallback")
         }
+
+        // ランダムなパレットで開始
+        let randomPalette = ColorPalette.allCases.randomElement()!
+        targetPaletteColors = randomPalette.colors
+        currentPaletteColors = randomPalette.colors
+        randomize(with: randomPalette.colors)
     }
     
     func randomize(with colors: [Color]) {
@@ -315,7 +349,9 @@ final class KaleidoscopeState {
         let elementCount = Int.random(in: quality.particleCountRange)
         
         seedElements = currentGenerationAlgorithm.generate(count: elementCount, colors: colors)
-        
+        refreshColorBases()
+
+
         // Metal bufferを初期化
         if useMetal {
             metalEngine?.initializeParticles(count: seedElements.count)
@@ -381,14 +417,12 @@ final class KaleidoscopeState {
         // Gradually slow down over time (like a spinning top) - 極めて緩やかに
         let decayRate = 0.008  // さらに遅い減衰で永続的な滑らかさ
         kineticEnergy *= (1.0 - decayRate * smoothDelta * 60)
-        
-        // Clamp to minimum threshold
-        if kineticEnergy < 0.001 {
-            kineticEnergy = 0
-            isResting = true
-        } else {
-            isResting = false
-        }
+
+        // 下限を設定してanimationPhaseの完全凍結を防ぐ
+        // phaseが凍結するとMetal側の擬似乱数(phase依存)が定数化し、
+        // 目的地が現在位置の決定的関数となって固定ループ軌道（円軌道）が発生する
+        kineticEnergy = max(0.15, kineticEnergy)
+        isResting = false
         
         // Rotation velocity also decays - より緩やかに
         rotationVelocity *= (1.0 - decayRate * 0.5 * smoothDelta * 60)
@@ -437,6 +471,15 @@ final class KaleidoscopeState {
         
         tapRipples.removeAll { animationPhase - $0.startTime > 5.0 }
         
+        // 鼓動: 10〜20秒毎にランダムな間隔で、柔らかな波を中心から放つ
+        timeSinceLastHeartbeat += smoothDelta
+        heartbeatAge += smoothDelta
+        if timeSinceLastHeartbeat >= heartbeatInterval {
+            heartbeatAge = 0.0
+            heartbeatInterval = Double.random(in: 10...20)
+            timeSinceLastHeartbeat = 0.0
+        }
+
         // 自動パレット切り替え - ランダムな間隔で
         timeSinceLastPaletteChange += smoothDelta
         if timeSinceLastPaletteChange >= paletteChangeInterval {
@@ -484,14 +527,10 @@ final class KaleidoscopeState {
             timeSinceLastSymmetryChange = 0.0
         }
         
-        // 対称性の遷移をスムーズに
+        // 対称性の遷移を進める（描画側がこの進捗でクロスフェードする）
         if symmetryTransitionProgress < 1.0 {
             symmetryTransitionProgress = min(1.0, symmetryTransitionProgress + smoothDelta * 0.3)
-            
-            // イージング（スムーズな遷移）
-            let eased = 1.0 - pow(1.0 - symmetryTransitionProgress, 3.0)
-            let interpolated = Double(symmetryCount) * (1.0 - eased) + Double(targetSymmetryCount) * eased
-            
+
             // 遷移完了時に正確な値に設定
             if symmetryTransitionProgress >= 1.0 {
                 symmetryCount = targetSymmetryCount
@@ -568,6 +607,10 @@ final class KaleidoscopeState {
             var flowX: Double = 0.0
             var flowY: Double = 0.0
             
+            // 蛍の明滅（CPU版は非結合パルスのみ — Metal版でKuramoto結合）
+            element.pulsePhase = (element.pulsePhase + element.pulseFreq * smoothDelta)
+                .truncatingRemainder(dividingBy: 2 * Double.pi)
+
             // 1. 休憩中かチェック
             if element.isResting {
                 element.restTime -= smoothDelta
@@ -580,40 +623,61 @@ final class KaleidoscopeState {
                 flowX = Double.random(in: -tremor...tremor)
                 flowY = Double.random(in: -tremor...tremor)
             } else {
-                // 2. 目的地がない、または目的地に到達したら新しい目的地を設定
+                // 2. 目的地がない、または到達したら新しい目的地を設定
                 if element.goalPosition == nil || element.timeUntilNewGoal <= 0 {
-                    // 性格によって行動が変わる
-                    if element.curiosity > 0.7 {
-                        // 好奇心旺盛: 遠くの場所を目指す
-                        let angle = Double.random(in: 0...(2 * .pi))
-                        let distance = Double.random(in: 0.3...0.8)
+                    // 完全にランダムで美しい目的地を生成
+                    let rand1 = Double.random(in: 0...1)
+                    let rand2 = Double.random(in: 0...1)
+                    let rand3 = Double.random(in: 0...1)
+                    
+                    // 性格と気分の組み合わせで無数のパターン
+                    let exploreFactor = element.curiosity * element.mood
+                    let calmFactor = (1.0 - element.personality) * (1.0 - element.mood)
+                    
+                    // 完全にランダムな直線的目的地（軌道運動なし）
+                    let padding = 0.05
+                    
+                    if exploreFactor > 0.6 {
+                        // 冒険的: 画面全体を自由に探索
                         seedElements[i].goalPosition = CGPoint(
-                            x: 0.5 + cos(angle) * distance,
-                            y: 0.5 + sin(angle) * distance
+                            x: padding + rand1 * (1.0 - padding * 2),
+                            y: padding + rand2 * (1.0 - padding * 2)
                         )
-                    } else if element.personality > 0.6 {
-                        // 外向的: 画面の端近くを目指す
-                        let edge = Int.random(in: 0...3)
-                        switch edge {
-                        case 0: seedElements[i].goalPosition = CGPoint(x: Double.random(in: 0.1...0.9), y: 0.1)
-                        case 1: seedElements[i].goalPosition = CGPoint(x: 0.9, y: Double.random(in: 0.1...0.9))
-                        case 2: seedElements[i].goalPosition = CGPoint(x: Double.random(in: 0.1...0.9), y: 0.9)
-                        default: seedElements[i].goalPosition = CGPoint(x: 0.1, y: Double.random(in: 0.1...0.9))
+                    } else if calmFactor > 0.5 {
+                        // 落ち着いている: 中心付近をランダムに
+                        seedElements[i].goalPosition = CGPoint(
+                            x: 0.35 + rand1 * 0.3,
+                            y: 0.35 + rand2 * 0.3
+                        )
+                    } else if element.personality > 0.7 {
+                        // 活発: 4つの象限をランダムに移動
+                        let quadrant = Int(rand3 * 4.0)
+                        switch quadrant {
+                        case 0: // 左上
+                            seedElements[i].goalPosition = CGPoint(x: padding + rand1 * 0.4, y: padding + rand2 * 0.4)
+                        case 1: // 右上
+                            seedElements[i].goalPosition = CGPoint(x: 0.5 + rand1 * 0.45, y: padding + rand2 * 0.4)
+                        case 2: // 左下
+                            seedElements[i].goalPosition = CGPoint(x: padding + rand1 * 0.4, y: 0.5 + rand2 * 0.45)
+                        default: // 右下
+                            seedElements[i].goalPosition = CGPoint(x: 0.5 + rand1 * 0.45, y: 0.5 + rand2 * 0.45)
                         }
                     } else {
-                        // 内向的: 画面中央付近を目指す
+                        // その他: 完全自由なランダム配置
                         seedElements[i].goalPosition = CGPoint(
-                            x: Double.random(in: 0.3...0.7),
-                            y: Double.random(in: 0.3...0.7)
+                            x: padding + rand1 * (1.0 - padding * 2),
+                            y: padding + rand2 * (1.0 - padding * 2)
                         )
                     }
                     
-                    // 次の目的地変更までの時間（性格によって変わる）
-                    let changeInterval = (1.0 - element.curiosity) * 5.0 + 2.0
-                    seedElements[i].timeUntilNewGoal = changeInterval
+                    // 目的地変更の間隔も個性的に
+                    let baseInterval = 2.0 + rand3 * 4.0
+                    let curiosityModifier = (1.0 - element.curiosity) * 3.0
+                    let moodModifier = element.mood * 2.0
+                    seedElements[i].timeUntilNewGoal = baseInterval + curiosityModifier - moodModifier
                     
-                    // さまよう角度を更新
-                    seedElements[i].wanderAngle = Double.random(in: 0...(2 * .pi))
+                    // さまよう角度を美しく初期化
+                    seedElements[i].wanderAngle = rand1 * 2 * .pi
                 }
                 
                 // 3. 目的地に向かって移動
@@ -636,16 +700,29 @@ final class KaleidoscopeState {
                         let dirX = toGoalX / distanceToGoal
                         let dirY = toGoalY / distanceToGoal
                         
-                        // さまよい成分（Wandering Behavior）
-                        element.wanderAngle += Double.random(in: -0.5...0.5) * element.personality
-                        let wanderStrength = 0.3 * (1.0 - element.mood)
-                        let wanderX = cos(element.wanderAngle) * wanderStrength
-                        let wanderY = sin(element.wanderAngle) * wanderStrength
+                        // さまよい成分（有機的で美しい揺らぎ）
+                        // 各個体が異なるリズムで揺らぐ
+                        let timeScale = currentTime * (0.5 + element.personality * 1.5)
+                        let wobble1 = sin(timeScale * 0.7 + element.phaseOffset * 3.0)
+                        let wobble2 = cos(timeScale * 1.3 + element.phaseOffset * 5.0)
+                        let wobble3 = sin(timeScale * 0.4 + element.phaseOffset * 7.0)
+                        
+                        // dtスケールでフレームレート非依存に（120fpsで角度が高速回転し円運動化するのを防ぐ）
+                        element.wanderAngle += (wobble1 * 0.3 + wobble2 * 0.2) * element.personality * smoothDelta * 60.0
+                        
+                        let wanderStrength = (0.2 + element.sociability * 0.4) * (1.0 - element.mood * 0.5)
+                        let wanderX = cos(element.wanderAngle) * wanderStrength + wobble3 * 0.1
+                        let wanderY = sin(element.wanderAngle) * wanderStrength + wobble2 * 0.1
                         
                         // 合成（目的地への力 + さまよい）
-                        let seekStrength = 0.005 * (0.5 + element.mood * 0.5)
-                        flowX = dirX * seekStrength + wanderX * 0.001
-                        flowY = dirY * seekStrength + wanderY * 0.001
+                        // 各個体が異なる速度で動く（完全にランダム）
+                        let baseSpeed = 0.0008 + element.curiosity * 0.0012  // 好奇心で速度が変わる
+                        let moodVariation = element.mood * 0.0008  // 気分で速度が揺らぐ
+                        let personalitySpeed = element.personality * 0.0006  // 性格で速度が変わる
+                        
+                        let seekStrength = baseSpeed + moodVariation + personalitySpeed
+                        flowX = dirX * seekStrength + wanderX * 0.0003
+                        flowY = dirY * seekStrength + wanderY * 0.0003
                         
                         // 時間を減らす
                         seedElements[i].timeUntilNewGoal -= smoothDelta
@@ -653,161 +730,30 @@ final class KaleidoscopeState {
                 }
             }
             
-            // デバイス傾きによる重力効果（目に見える自然な影響）
-            // 深度によって傾きへの反応性を変える（奥のものほど遅く動く）
-            let tiltResponsiveness = (1.0 - element.depth * 0.3) * effectiveEnergy
-            let tiltStrength = 0.025 * tiltResponsiveness  // より明確な影響
-            
-            // 傾きに基づく重力的な力を加える（重力のように働く）
-            flowX += smoothTilt.x * tiltStrength
-            flowY += smoothTilt.y * tiltStrength
-            
-            // === 環境からの影響（弱く） ===
-            
-            // タッチ位置からの微弱な影響（引き寄せない、押し出さない、ただ少し影響を受ける程度）
-            if element.curiosity > 0.7 {
-                let touchCenterX = 0.5 + smoothTouchOffset.x * 0.1
-                let touchCenterY = 0.5 + smoothTouchOffset.y * 0.1
-                let toTouchX = touchCenterX - element.position.x
-                let toTouchY = touchCenterY - element.position.y
-                let distanceToTouch = sqrt(toTouchX * toTouchX + toTouchY * toTouchY)
-                
-                if distanceToTouch > 0.2 && distanceToTouch < 0.5 {
-                    // 非常に弱い引力（好奇心が高い個体のみ、遠い場合のみ）
-                    let weakAttraction = 0.0001 * element.curiosity
-                    flowX += toTouchX * weakAttraction
-                    flowY += toTouchY * weakAttraction
-                }
-            }
-            
-            // === 生き物としての知性と感情に基づく動き ===
+            // 環境からの微弱な影響のみ（他のパーティクルは完全に無視）
+            // デバイス傾きによる重力
+            flowX += smoothTilt.x * 0.015
+            flowY += smoothTilt.y * 0.015
             
             // 気分の変化（ランダムウォーク）
             element.mood += (Double.random(in: -0.02...0.02) * element.personality)
             element.mood = max(0.0, min(1.0, element.mood))
             
-            // 周囲の粒子を感知（sociabilityが高いほど広範囲）+ 衝突反発
-            var nearbyCount = 0
-            var attractionX: Double = 0
-            var attractionY: Double = 0
-            var collisionForceX: Double = 0
-            var collisionForceY: Double = 0
-            let awarenessRadius = 0.15 * element.sociability
+            // 生命体システム: 滑らかで美しい動き
+            element.position.x += flowX * 60.0 * smoothDelta
+            element.position.y += flowY * 60.0 * smoothDelta
             
-            // Boids群れ行動用
-            var avgVelocityX: Double = 0  // Alignment: 周囲の平均速度
-            var avgVelocityY: Double = 0
-            var centerOfMassX: Double = 0  // Cohesion: 群れの中心
-            var centerOfMassY: Double = 0
-            var separationX: Double = 0    // Separation: 近すぎる粒子から離れる
-            var separationY: Double = 0
+            // velocityは表示用に更新（互換性のため）
+            element.velocity.x = flowX * 10.0
+            element.velocity.y = flowY * 10.0
             
-            // 品質に応じた衝突検出
-            var checkedCount = 0
-            let maxChecks = performanceMonitor.currentQuality.maxCollisionChecks
-            let enableCollision = performanceMonitor.currentQuality.enableCollisionDetection
+            element.awareness = 0.0
             
-            // 衝突検出が有効な場合のみ実行
-            if enableCollision {
-                for j in seedElements.indices where j != i && checkedCount < maxChecks {
-                let other = seedElements[j]
-                let dx = other.position.x - element.position.x
-                let dy = other.position.y - element.position.y
-                let distanceSq = dx * dx + dy * dy
-                
-                // 衝突判定（距離の二乗で高速化）- より大きく強い反発
-                let collisionRadius = 0.08  // 衝突判定の半径を大きく
-                let collisionRadiusSq = collisionRadius * collisionRadius
-                
-                if distanceSq < collisionRadiusSq && distanceSq > 0.0001 {
-                    // 衝突している - ランダムな反発力を適用（予測不可能な動き）
-                    let distance = sqrt(distanceSq)
-                    let overlap = collisionRadius - distance
-                    let baseRepulsion = overlap * 1.2  // 反発力を強く
-                    
-                    // ランダムな反発角度でカオス的な動きを生成
-                    let randomAngle = Double.random(in: -0.3...0.3)
-                    let angle = atan2(dy, dx) + randomAngle
-                    
-                    collisionForceX -= Foundation.cos(angle) * baseRepulsion
-                    collisionForceY -= Foundation.sin(angle) * baseRepulsion
-                    
-                    // 衝突時にエネルギーとランダムな回転を付与
-                    seedElements[i].energy = min(1.0, element.energy + 0.3)
-                    seedElements[i].rotationSpeed += Double.random(in: -8...8)
-                    
-                    checkedCount += 1
-                } else if distanceSq < awarenessRadius * awarenessRadius && distanceSq > 0.001 {
-                    // 近くにいるが衝突していない - Separationのみ（引力は円運動の原因なので削除）
-                    nearbyCount += 1
-                    
-                    // Separation: 近すぎる粒子からの反発（これだけ残す）
-                    if distanceSq < 0.01 {  // 非常に近い
-                        let separationStrength = (0.01 - distanceSq) * 10.0
-                        separationX -= dx * separationStrength
-                        separationY -= dy * separationStrength
-                    }
-                    
-                    checkedCount += 1
-                }
-                }
-            }
-            
-            // === Separationのみ（円運動を生むCohesionとAlignmentは無効化） ===
-            if nearbyCount > 0 {
-                // Separation: 近すぎる粒子から離れる（これだけは円運動を生まない）
-                let separationStrength = element.personality * 0.03
-                element.flockSeparation = separationStrength
-                flowX += separationX * separationStrength
-                flowY += separationY * separationStrength
-                
-                // AlignmentとCohesionは削除（これらが定位置での円運動の原因）
-                element.flockAlignment = 0.0
-                element.flockCohesion = 0.0
-            }
-            
-            // 衝突力を速度に追加
-            element.velocity.x += collisionForceX
-            element.velocity.y += collisionForceY
-            
-            element.awareness = Double(nearbyCount) / 10.0
-            
-            // 相互作用の記録
-            if nearbyCount > 0 {
-                seedElements[i].lastInteractionTime = animationPhase
-                seedElements[i].interactionCount += nearbyCount
-            }
-            
-            // attractionX/Yは削除（他のパーティクルへの引力が円運動を生成）
-            // 完全に独立した動きのみ
-            
-            // 内向的な粒子は時々立ち止まる（完全ランダムなタイミング）
-            if element.personality < 0.3 && Double.random(in: 0...1) < 0.05 {
-                flowX *= 0.2
-                flowY *= 0.2
-            }
-            
-            // より滑らかで自然な速度減衰（生物の動きのように）
-            let velocityDecayRate = 2.2 + (1.0 - effectiveEnergy) * 2.8
-            let velocityDecay = exp(-velocityDecayRate * smoothDelta)
-            element.velocity.x *= velocityDecay
-            element.velocity.y *= velocityDecay
-            
-            // 極めて滑らかな位置統合（慣性を保ち、カクつきを完全に排除）
-            let responsiveness = (0.96 - element.depth * 0.08) * effectiveEnergy
-            let positionDecay = exp(-3.5 * smoothDelta * max(0.2, responsiveness))
-            
-            let targetX = element.position.x + (element.velocity.x + flowX) * 20
-            let targetY = element.position.y + (element.velocity.y + flowY) * 20
-            
-            // 位置更新前にトレイルを記録
+            // 位置更新後にトレイルを記録
             seedElements[i].trail.append(element.position)
             if seedElements[i].trail.count > element.maxTrailLength {
                 seedElements[i].trail.removeFirst()
             }
-            
-            element.position.x = targetX + (element.position.x - targetX) * positionDecay
-            element.position.y = targetY + (element.position.y - targetY) * positionDecay
             
             // モーフィング処理を無効化
             // 理由: 円形アルゴリズムへのモーフィングが円運動を生成
@@ -862,9 +808,73 @@ final class KaleidoscopeState {
             baseRotation += tiltRotationInfluence
             
             element.rotation += Angle(degrees: (element.rotationSpeed + baseRotation) * smoothDelta * 45 * rotationIntensity)
-            
+
             seedElements[i] = element
             }
+        }
+
+        // 生命表現のプリコンピュート（鼓動波・蛍の明滅・生きた色彩）
+        updateLivingExpression()
+    }
+
+    // フレーム毎の生命表現プリコンピュート
+    // 描画は要素×対称数×2ミラー×3層で呼ばれるため、要素毎の値はここで1回だけ計算する
+    private func updateLivingExpression() {
+        let phi = 1.618033988749895
+
+        // 鼓動波: ガウシアン包絡の放射波（鋭いリングではなく柔らかな膨らみ）
+        let waveSpeed = 0.32                                  // 正規化距離/秒 → 約2.2秒で端へ
+        let waveFront = heartbeatAge * waveSpeed
+        let waveAmp = exp(-heartbeatAge * 0.85)               // 進むほど減衰、~5秒でゼロ短絡
+        let waveActive = waveAmp > 0.01
+
+        for i in seedElements.indices {
+            var element = seedElements[i]
+
+            var waveEnv = 0.0
+            if waveActive {
+                let dx = element.position.x - 0.5
+                let dy = element.position.y - 0.5
+                let radialDist = Double((dx * dx + dy * dy).squareRoot())
+                let d = radialDist - waveFront
+                waveEnv = exp(-(d * d) / (2.0 * 0.065 * 0.065)) * waveAmp
+            }
+
+            let pulse = 0.5 + 0.5 * Foundation.sin(element.pulsePhase)
+            element.swellBoost = waveEnv * 0.16
+            element.glowBoost = pulse * 0.30 + waveEnv * 0.45 + element.energy * 0.35
+
+            // 色相のミクロドリフト: パルス連動±4.5° + 緩慢な二次ドリフト±2.5°
+            // 周波数は非整合（pulseFreqは個体毎ランダム、二次は黄金比）のため反復しない
+            let hueDrift = Foundation.sin(element.pulsePhase) * 0.0125 +
+                           Foundation.sin(animationPhase * 0.073 * phi + element.phaseOffset * 1.7) * 0.007
+            var hue = (element.hueBase + hueDrift).truncatingRemainder(dividingBy: 1.0)
+            if hue < 0 { hue += 1.0 }
+
+            let sat = min(1.0, element.satBase * (1.0 + element.energy * 0.10 - pulse * 0.04))
+            let bri = min(1.0, element.briBase * (1.0 + element.glowBoost * 0.22))
+            element.displayColor = Color(hue: hue, saturation: sat, brightness: bri, opacity: element.alphaBase)
+
+            seedElements[i] = element
+        }
+    }
+
+    // 色のHSBベース成分を抽出（色が変わった時のみ呼ぶ — 毎フレームの定常呼び出しは禁止）
+    private func extractHSB(_ color: Color) -> (h: Double, s: Double, b: Double, a: Double) {
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        if UIColor(color).getHue(&h, saturation: &s, brightness: &b, alpha: &a) {
+            return (Double(h), Double(s), Double(b), Double(a))
+        }
+        return (0, 0, 0.9, 1)  // フォールバック（白系）
+    }
+
+    private func refreshColorBases() {
+        for i in seedElements.indices {
+            let hsb = extractHSB(seedElements[i].color)
+            seedElements[i].hueBase = hsb.h
+            seedElements[i].satBase = hsb.s
+            seedElements[i].briBase = hsb.b
+            seedElements[i].alphaBase = hsb.a
         }
     }
     
@@ -877,7 +887,14 @@ final class KaleidoscopeState {
         let newCount = Int.random(in: 40...60)
         pendingElements = (0..<newCount).map { index in
             let depth = Double(index) / Double(newCount)
-            return SeedElement.random(colors: currentPaletteColors, colorIndex: index, depth: depth)
+            var element = SeedElement.random(colors: currentPaletteColors, colorIndex: index, depth: depth)
+            // 生命体システム: 新しいパーティクルの目的地をリセット
+            element.goalPosition = nil
+            element.timeUntilNewGoal = 0.0
+            element.wanderAngle = Double.random(in: 0...(2 * .pi))
+            element.isResting = false
+            element.restTime = 0.0
+            return element
         }
         
         if Bool.random() && Bool.random() {
@@ -908,6 +925,12 @@ final class KaleidoscopeState {
         for i in seedElements.indices {
             if i < pendingElements.count {
                 seedElements[i] = pendingElements[i]
+                // 生命体システム: 目的地をリセット（新しい行動を開始）
+                seedElements[i].goalPosition = nil
+                seedElements[i].timeUntilNewGoal = 0.0
+                seedElements[i].wanderAngle = Double.random(in: 0...(2 * .pi))
+                seedElements[i].isResting = false
+                seedElements[i].restTime = 0.0
             }
         }
         
@@ -940,7 +963,10 @@ final class KaleidoscopeState {
             let toColor = targetPaletteColors[colorIndex % targetPaletteColors.count]
             seedElements[i].color = interpolateColor(from: fromColor, to: toColor, progress: colorTransitionProgress)
         }
-        
+
+        // パレット遷移中（~1.7秒間）のみ毎フレーム再抽出される
+        refreshColorBases()
+
         if colorTransitionProgress >= 1.0 {
             currentPaletteColors = targetPaletteColors
         }

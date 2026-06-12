@@ -26,52 +26,91 @@ struct KaleidoscopeCanvasView: View {
     private func drawFullScreenKaleidoscope(context: GraphicsContext, canvasSize: CGSize, phase: Double) {
         let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
         let maxDimension = max(canvasSize.width, canvasSize.height)
-        
+
         // シンプルで美しい構成 - 不要なエフェクトを全て削除
-        
+
         // Layer 1: 深い背景のみ
         drawDeepBackground(context: context, size: canvasSize, center: center, phase: phase)
-        
+
+        // 対称性のクロスフェード遷移
+        // 旧対称性が溶けるように消え、新対称性が浮かび上がる
+        let progress = state.symmetryTransitionProgress
+        if progress < 1.0 && state.symmetryCount != state.targetSymmetryCount {
+            let eased = 1.0 - pow(1.0 - progress, 3.0)
+            drawSymmetryLayers(
+                context: context, center: center, maxDimension: maxDimension,
+                phase: phase, symmetryBase: state.symmetryCount, opacityScale: 1.0 - eased
+            )
+            drawSymmetryLayers(
+                context: context, center: center, maxDimension: maxDimension,
+                phase: phase, symmetryBase: state.targetSymmetryCount, opacityScale: eased
+            )
+        } else {
+            drawSymmetryLayers(
+                context: context, center: center, maxDimension: maxDimension,
+                phase: phase, symmetryBase: state.symmetryCount, opacityScale: 1.0
+            )
+        }
+    }
+
+    private func drawSymmetryLayers(
+        context: GraphicsContext,
+        center: CGPoint,
+        maxDimension: CGFloat,
+        phase: Double,
+        symmetryBase: Int,
+        opacityScale: Double
+    ) {
+        // 全体の呼吸: 作品全体が中心からゆっくり膨張・収縮する（±1.8%）
+        // 黄金比ベースの非整合二重周波数で、機械的な単振動を避ける
+        // phaseは実時間（壁時計）なので、静穏時も呼吸は続く
+        let phi = 1.618033988749895
+        let breathOmega = 2.0 * Double.pi / 8.3  // 主周期 8.3秒
+        let breath = Foundation.sin(phase * breathOmega) * 0.011 +
+                     Foundation.sin(phase * breathOmega * phi * 0.93 + 2.1) * 0.007
+        let breathScale = 1.0 + breath
+        let breathGlow = 1.0 + breath * 1.4  // 吸気でわずかに明るく
+
         // Layer 2: メインカレイドスコープ - 全ての粒子
-        let mainRadius = maxDimension * 0.7
+        let mainRadius = maxDimension * 0.7 * breathScale
         drawKaleidoscopeLayer(
             context: context,
             center: center,
             radius: mainRadius,
             phase: phase,
-            symmetryCount: state.symmetryCount,
+            symmetryCount: symmetryBase,
             rotation: state.globalRotation,
             elements: state.seedElements,
             animationPhase: state.animationPhase,
-            opacity: 1.0
+            opacity: min(1.0, 1.0 * breathGlow) * opacityScale
         )
-        
+
         // Layer 3: インナーレイヤー（異なる対称性）
-        let innerRadius = maxDimension * 0.45
+        let innerRadius = maxDimension * 0.45 * breathScale
         drawKaleidoscopeLayer(
             context: context,
             center: center,
             radius: innerRadius,
             phase: phase + 0.4,
-            symmetryCount: state.symmetryCount + 2,
+            symmetryCount: symmetryBase + 2,
             rotation: -state.globalRotation * 1.3,
             elements: Array(state.seedElements.prefix(state.seedElements.count / 2)),
             animationPhase: state.animationPhase * 1.2,
-            opacity: 0.85
+            opacity: min(1.0, 0.85 * breathGlow) * opacityScale
         )
-        
+
         // Layer 4: コアレイヤー（さらに異なる対称性）
-        let coreRadius = maxDimension * 0.25
+        let coreRadius = maxDimension * 0.25 * breathScale
         drawKaleidoscopeLayer(
             context: context,
             center: center,
             radius: coreRadius,
             phase: phase + 0.8,
-            symmetryCount: state.symmetryCount + 4,
+            symmetryCount: symmetryBase + 4,
             rotation: state.globalRotation * 1.8,
             elements: Array(state.seedElements.prefix(state.seedElements.count / 3)),
             animationPhase: state.animationPhase * 1.5,
-            opacity: 0.7
+            opacity: min(1.0, 0.7 * breathGlow) * opacityScale
         )
     }
     
@@ -300,14 +339,20 @@ struct KaleidoscopeCanvasView: View {
     ) {
         let elementPhase = phase + element.phaseOffset
         
-        // より繊細で複雑な流れ（個性を持たせる）
-        let flowFreq1 = 0.23 + element.depth * 0.13 + Foundation.sin(element.phaseOffset) * 0.04
-        let flowFreq2 = 0.17 + element.depth * 0.09 + Foundation.cos(element.phaseOffset * 1.3) * 0.03
-        
-        var flowX = (Foundation.sin(elementPhase * flowFreq1) * 0.07 +
-                    Foundation.cos(elementPhase * flowFreq2 + element.phaseOffset) * 0.04)
-        var flowY = (Foundation.cos(elementPhase * flowFreq1 * 0.87) * 0.07 +
-                    Foundation.sin(elementPhase * flowFreq2 * 1.15 + element.phaseOffset) * 0.04)
+        // 微細な漂い（水墨画の墨が水中で漂うように）
+        // 旧実装はsin/cosペアがほぼ同一周波数で、±0.11×radiusの円形リサージュ軌道を
+        // 全エレメントに与えていた（円軌道に見える最後の残存原因）
+        // x/yを黄金比ベースの非整合周波数で完全に分離し、閉軌道を描かないゆらぎにする
+        let phi = 1.618033988749895
+        let fx1 = 0.21 + element.depth * 0.11
+        let fx2 = fx1 * phi
+        let fy1 = 0.13 + element.depth * 0.07
+        let fy2 = fy1 * phi * 1.083
+
+        var flowX = Foundation.sin(elementPhase * fx1 + element.phaseOffset) * 0.022 +
+                    Foundation.sin(elementPhase * fx2 + element.phaseOffset * 2.7) * 0.012
+        var flowY = Foundation.sin(elementPhase * fy1 + element.phaseOffset * 1.9) * 0.022 +
+                    Foundation.sin(elementPhase * fy2 + element.phaseOffset * 4.3) * 0.012
         
         // タップ周辺の局所的な歪み効果
         for ripple in state.tapRipples {
@@ -342,31 +387,46 @@ struct KaleidoscopeCanvasView: View {
         let breathe = 1.0 + (Foundation.sin(elementPhase * breatheFreq1) * 0.11 +
                             Foundation.cos(elementPhase * breatheFreq2 + element.phaseOffset) * 0.07)
         let energyScale = 1.0 + element.energy * 0.5
-        let size = baseSize * breathe * energyScale
-        
+        // 鼓動波が通過すると、ふわっと膨らむ
+        let size = baseSize * breathe * energyScale * (1.0 + element.swellBoost)
+
+        // 高エネルギー個体の柔らかなブルーム
+        // 閾値0.38 = パルス単独(max 0.30)では発火せず、鼓動波の通過やタップ励起時のみ
+        if element.glowBoost > 0.38 {
+            let halo = (element.glowBoost - 0.38) / 0.62
+            let haloR = size * (1.6 + halo * 1.2)
+            context.fill(
+                Path(ellipseIn: CGRect(x: pos.x - haloR, y: pos.y - haloR, width: haloR * 2, height: haloR * 2)),
+                with: .radialGradient(
+                    Gradient(colors: [element.displayColor.opacity(halo * 0.14), .clear]),
+                    center: pos, startRadius: 0, endRadius: haloR
+                )
+            )
+        }
+
         switch element.type {
         case .circle, .star:
-            drawLuminousOrb(context: &context, center: pos, radius: size, color: element.color, phase: elementPhase)
+            drawLuminousOrb(context: &context, center: pos, radius: size, color: element.displayColor, phase: elementPhase)
         case .dot:
-            drawSimpleDot(context: &context, center: pos, radius: size, color: element.color)
+            drawSimpleDot(context: &context, center: pos, radius: size, color: element.displayColor)
         case .nebula:
-            drawNebula(context: &context, center: pos, radius: size, color: element.color, phase: elementPhase)
+            drawNebula(context: &context, center: pos, radius: size, color: element.displayColor, phase: elementPhase)
         case .curve, .wave, .arc, .wavyLine, .coil, .helix, .snake:
-            drawEtherealThread(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
+            drawEtherealThread(context: &context, center: pos, radius: size, color: element.displayColor, rotation: element.rotation, phase: elementPhase)
         case .tendril, .spiral, .vine, .whip, .lasso:
-            drawTendril(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
+            drawTendril(context: &context, center: pos, radius: size, color: element.displayColor, rotation: element.rotation, phase: elementPhase)
         case .droplet, .crescent:
-            drawDroplet(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
+            drawDroplet(context: &context, center: pos, radius: size, color: element.displayColor, rotation: element.rotation, phase: elementPhase)
         case .petal, .diamond:
-            drawPetal(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
+            drawPetal(context: &context, center: pos, radius: size, color: element.displayColor, rotation: element.rotation, phase: elementPhase)
         case .zigzag, .dash, .brokenLine, .lightning, .streak, .beam, .trail:
-            drawZigzag(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, phase: elementPhase)
+            drawZigzag(context: &context, center: pos, radius: size, color: element.displayColor, rotation: element.rotation, phase: elementPhase)
         case .doubleLine, .tripleLine, .ribbon, .thread, .fiber, .braid, .chain, .rope:
-            drawEtherealThread(context: &context, center: pos, radius: size * 1.2, color: element.color, rotation: element.rotation, phase: elementPhase)
+            drawEtherealThread(context: &context, center: pos, radius: size * 1.2, color: element.displayColor, rotation: element.rotation, phase: elementPhase)
         case .ring, .ellipse:
-            drawRing(context: &context, center: pos, radius: size, color: element.color, phase: elementPhase)
+            drawRing(context: &context, center: pos, radius: size, color: element.displayColor, phase: elementPhase)
         case .triangle, .square, .hexagon, .cross:
-            drawGeometric(context: &context, center: pos, radius: size, color: element.color, rotation: element.rotation, type: element.type)
+            drawGeometric(context: &context, center: pos, radius: size, color: element.displayColor, rotation: element.rotation, type: element.type)
         }
     }
     

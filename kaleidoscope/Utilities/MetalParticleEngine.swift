@@ -18,6 +18,12 @@ struct MetalParticle {
     var wanderAngle: Float
     var isResting: Bool
     var restTime: Float
+    var flockAlignment: Float
+    var flockCohesion: Float
+    var flockSeparation: Float
+    var pulsePhase: Float
+    var pulseFreq: Float
+    var _pad0: Float = 0  // Metal側Particleと size == stride == 96 を一致させる
 }
 
 // Metal側のSimulationParams構造体と対応
@@ -50,7 +56,12 @@ class MetalParticleEngine {
             return nil
         }
         self.device = device
-        
+
+        // Metal側Particle構造体とのレイアウト一致を保証（不一致は全モーション破壊につながる）
+        assert(MemoryLayout<MetalParticle>.stride == 96,
+               "MetalParticle layout drifted from Metal Particle struct (stride: \(MemoryLayout<MetalParticle>.stride))")
+
+
         guard let commandQueue = device.makeCommandQueue() else {
             print("Failed to create command queue")
             return nil
@@ -121,7 +132,12 @@ class MetalParticleEngine {
                 timeUntilNewGoal: Float(element.timeUntilNewGoal),
                 wanderAngle: Float(element.wanderAngle),
                 isResting: element.isResting,
-                restTime: Float(element.restTime)
+                restTime: Float(element.restTime),
+                flockAlignment: Float(element.flockAlignment),
+                flockCohesion: Float(element.flockCohesion),
+                flockSeparation: Float(element.flockSeparation),
+                pulsePhase: Float(element.pulsePhase),
+                pulseFreq: Float(element.pulseFreq)
             )
         }
     }
@@ -150,6 +166,7 @@ class MetalParticleEngine {
             elements[index].wanderAngle = Double(metalParticle.wanderAngle)
             elements[index].isResting = metalParticle.isResting
             elements[index].restTime = Double(metalParticle.restTime)
+            elements[index].pulsePhase = Double(metalParticle.pulsePhase)
         }
     }
     
