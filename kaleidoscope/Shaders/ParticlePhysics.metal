@@ -245,13 +245,22 @@ kernel void updateParticles(
     float turnBlend = 1.0 - exp(-3.0 * dt);
     float2 flow = mix(prevFlow, targetFlow, turnBlend);
 
+    // 速度上限: タップ・シェイクで注入された velocity が慣性経由で
+    // 持続的な高速移動になるのを防ぐ
+    // （自然な自走速度の最大値 ~0.0037 は上限に触れず、衝撃のみ穏やかに制限される）
+    const float maxFlowSpeed = 0.005;
+    float flowLen = length(flow);
+    if (flowLen > maxFlowSpeed) {
+        flow *= maxFlowSpeed / flowLen;
+    }
+
     // velocityには自発的な流れのみを保存（次フレームの慣性の基準。flow*10形式を維持）
     particle.velocity = flow * 10.0;
 
-    // 環境からの微弱な影響（デバイス傾きによる重力）は位置にのみ作用させる
+    // 環境からの微弱な影響（デバイス傾きによる重力）は位置にのみ作用させる（一時的に無効化）
     // 慣性ブレンドのループに含めると傾きが蓄積・増幅されてしまうため
-    flow.x += params.tiltX * 0.015;
-    flow.y += params.tiltY * 0.015;
+    // flow.x += params.tiltX * 0.015;
+    // flow.y += params.tiltY * 0.015;
 
     // 生命体システム: 滑らかで美しい動き
     particle.position.x += flow.x * 60.0 * dt;
@@ -273,10 +282,10 @@ kernel void updateParticles(
     // 有機的な微回転（CPU版のrandomRotation相当）
     float organicRotation = chaosNoise(phase, particle.phaseOffset) * 0.3 * rotationIntensity;
 
-    // 傾きによる回転への影響（CPU版と同一）
-    float tiltRotation = params.tiltX * 0.35 * (1.0 - particle.depth * 0.25);
+    // 傾きによる回転への影響（CPU版と同一）（一時的に無効化）
+    // float tiltRotation = params.tiltX * 0.35 * (1.0 - particle.depth * 0.25);
 
-    float degreesPerSecond = (particle.rotationSpeed + organicRotation + tiltRotation) * 45.0 * rotationIntensity;
+    float degreesPerSecond = (particle.rotationSpeed + organicRotation) * 45.0 * rotationIntensity;
     particle.rotation += degreesPerSecond * dt * (M_PI_F / 180.0);
 
     // === 蛍の発光同期（Kuramoto振動子）: 休憩中も明滅は続く ===

@@ -731,9 +731,9 @@ final class KaleidoscopeState {
             }
             
             // 環境からの微弱な影響のみ（他のパーティクルは完全に無視）
-            // デバイス傾きによる重力
-            flowX += smoothTilt.x * 0.015
-            flowY += smoothTilt.y * 0.015
+            // デバイス傾きによる重力（一時的に無効化）
+            // flowX += smoothTilt.x * 0.015
+            // flowY += smoothTilt.y * 0.015
             
             // 気分の変化（ランダムウォーク）
             element.mood += (Double.random(in: -0.02...0.02) * element.personality)
@@ -803,9 +803,9 @@ final class KaleidoscopeState {
                 baseRotation += Double.random(in: -0.2...0.2) * element.curiosity
             }
             
-            // 傾きによる回転への影響（左右の傾きで回転速度が変化）
-            let tiltRotationInfluence = smoothTilt.x * 0.35 * (1.0 - element.depth * 0.25)
-            baseRotation += tiltRotationInfluence
+            // 傾きによる回転への影響（左右の傾きで回転速度が変化）（一時的に無効化）
+            // let tiltRotationInfluence = smoothTilt.x * 0.35 * (1.0 - element.depth * 0.25)
+            // baseRotation += tiltRotationInfluence
             
             element.rotation += Angle(degrees: (element.rotationSpeed + baseRotation) * smoothDelta * 45 * rotationIntensity)
 
